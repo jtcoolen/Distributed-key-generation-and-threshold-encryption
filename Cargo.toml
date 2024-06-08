@@ -1,0 +1,21 @@
+[package]
+name = "ideal_class_group_crypto"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+class_group = {git="https://github.com/ZenGo-X/class.git"}
+blstrs = "0.7.1"
+proptest = "1.4.0"
+classgroup = {git="https://github.com/hsaleemsupra/cgdkg_artifact.git"}
+getrandom = "0.2.15"
+ark-bls12-381 = "0.4.0"
+rug = "1.24.1"
+blake3 = "1.5.1"
+cargo-fuzz = "0.12.0"
+cargo-afl = "0.15.7"
+criterion = "0.5.1"
+num-traits = "0.2.19"
+num-bigint = "0.4.5"
+curv-kzen = "0.10.0"
+libcrux = "0.0.2-pre.2"
