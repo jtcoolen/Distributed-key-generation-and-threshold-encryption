@@ -61,6 +61,7 @@ fn nizk_dlog_verify(proof: NizkDlogProof, base: &BinaryQF, h: &BinaryQF, bound: 
 }
 
 fn main() {
+
     unsafe {
         class_group::pari_init(50000000, 2);
     }

@@ -23,6 +23,7 @@ llvmPackages.libcxxStdenv.mkDerivation {
     libcxx
     cargo
     rustc
+    ninja
   ] ++ lib.optionals libcxxStdenv.isDarwin
     (with darwin.apple_sdk.frameworks; [ Cocoa CoreServices Security ]);
 
