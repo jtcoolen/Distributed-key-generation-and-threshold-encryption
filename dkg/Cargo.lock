@@ -108,7 +108,7 @@ dependencies = [
  "ff",
  "group",
  "pairing",
- "rand_core",
+ "rand_core 0.6.4",
  "serde",
  "subtle",
 ]
@@ -298,6 +298,7 @@ dependencies = [
  "hacl-sys",
  "libcrux",
  "proptest",
+ "rand_core 0.9.0-alpha.1",
  "serde",
 ]
 
@@ -330,7 +331,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ded41244b729663b1e574f1b4fb731469f69f79c17667b5d776b16cda0479449"
 dependencies = [
  "bitvec",
- "rand_core",
+ "rand_core 0.6.4",
  "subtle",
 ]
 
@@ -379,7 +380,7 @@ checksum = "f0f9ef7462f7c099f518d754361858f86d8a07af53ba9af0fe635bbccb151a63"
 dependencies = [
  "ff",
  "rand",
- "rand_core",
+ "rand_core 0.6.4",
  "rand_xorshift",
  "subtle",
 ]
@@ -391,7 +392,7 @@ source = "git+https://github.com/jtcoolen/hacl-packages?rev=9d54a40edbbec7b2ee37
 dependencies = [
  "hacl-sys",
  "rand",
- "rand_core",
+ "rand_core 0.6.4",
 ]
 
 [[package]]
@@ -732,7 +733,7 @@ checksum = "34af8d1a0e25924bc5b7c43c079c942339d8f0a8b57c39049bef581b46327404"
 dependencies = [
  "libc",
  "rand_chacha",
- "rand_core",
+ "rand_core 0.6.4",
 ]
 
 [[package]]
@@ -742,7 +743,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e6c10a63a0fa32252be49d21e7709d4d4baf8d231c2dbce1eaa8141b9b127d88"
 dependencies = [
  "ppv-lite86",
- "rand_core",
+ "rand_core 0.6.4",
 ]
 
 [[package]]
@@ -755,12 +756,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "rand_core"
+version = "0.9.0-alpha.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cc89dffba8377c5ec847d12bb41492bda235dba31a25e8b695cd0fe6589eb8c9"
+dependencies = [
+ "zerocopy",
+]
+
+[[package]]
 name = "rand_xorshift"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d25bf25ec5ae4a3f1b92f929810509a2f53d7dca2f50b794ff57e3face536c8f"
 dependencies = [
- "rand_core",
+ "rand_core 0.6.4",
 ]
 
 [[package]]
@@ -1151,6 +1161,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "05f360fc0b24296329c78fda852a1e9ae82de9cf7b27dae4b7f62f118f77b9ed"
 dependencies = [
  "tap",
+]
+
+[[package]]
+name = "zerocopy"
+version = "0.8.0-alpha.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "db678a6ee512bd06adf35c35be471cae2f9c82a5aed2b5d15e03628c98bddd57"
+dependencies = [
+ "zerocopy-derive",
+]
+
+[[package]]
+name = "zerocopy-derive"
+version = "0.8.0-alpha.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "201585ea96d37ee69f2ac769925ca57160cef31acb137c16f38b02b76f4c1e62"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
