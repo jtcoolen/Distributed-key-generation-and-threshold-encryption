@@ -40,9 +40,12 @@ impl Z for Bignum4096 {
         }
     }
 
-    fn eq_abs(self, rhs: Self) -> bool {
+    fn eq_abs(mut self, rhs: Self) -> bool {
         let eq: u64 = unsafe {
-            hacl_sys::Hacl_Bignum4096_eq_mask(self.limbs.as_mut_ptr(), rhs.limbs.as_mut_ptr())
+            hacl_sys::Hacl_Bignum4096_eq_mask(
+                self.limbs.as_mut_ptr(),
+                rhs.limbs.clone().as_mut_ptr(),
+            )
         };
         eq != 0
     }
@@ -53,18 +56,21 @@ impl Z for Bignum4096 {
         res
     }
 
-    fn less_than_abs(self, rhs: Self) -> bool {
+    fn less_than_abs(&self, rhs: &Self) -> bool {
         let lt: u64 = unsafe {
-            hacl_sys::Hacl_Bignum4096_lt_mask(self.limbs.as_mut_ptr(), rhs.limbs.as_mut_ptr())
+            hacl_sys::Hacl_Bignum4096_lt_mask(
+                self.limbs.as_ptr() as *mut _,
+                rhs.limbs.as_ptr() as *mut _,
+            )
         };
         lt != 0
     }
 
-    fn less_than(self, rhs: Self) -> bool {
+    fn less_than(&self, rhs: &Self) -> bool {
         let both_positive = self.positive & rhs.positive;
         let both_negative = !self.positive & !rhs.positive;
         let self_negative_rhs_positive = !self.positive & rhs.positive;
-        let less_than_abs = self.less_than_abs(rhs);
+        let less_than_abs = self.less_than_abs(&rhs);
 
         let result_if_both_positive = both_positive & less_than_abs;
         let result_if_both_negative = both_negative & !less_than_abs;
@@ -73,14 +79,14 @@ impl Z for Bignum4096 {
         result_if_both_positive | result_if_both_negative | result_if_self_negative_rhs_positive
     }
 
-    fn add(mut self, mut rhs: Self) -> Self {
+    fn add(self, mut rhs: Self) -> Self {
         let mut res = Self::zero();
-        match (self.positive, rhs.positive, self.less_than(rhs)) {
+        match (self.positive, rhs.positive, self.less_than(&rhs)) {
             (true, true, _) => {
                 unsafe {
                     hacl_sys::Hacl_Bignum4096_add(
-                        self.limbs.as_mut_ptr(),
-                        rhs.limbs.as_mut_ptr(),
+                        self.limbs.as_ptr() as *mut _,
+                        rhs.limbs.as_ptr() as *mut _,
                         res.limbs.as_mut_ptr(),
                     );
                 }
@@ -89,8 +95,8 @@ impl Z for Bignum4096 {
             (false, false, _) => {
                 unsafe {
                     hacl_sys::Hacl_Bignum4096_add(
-                        rhs.limbs.as_mut_ptr(),
-                        self.limbs.as_mut_ptr(),
+                        rhs.limbs.as_ptr() as *mut _,
+                        self.limbs.as_ptr() as *mut _,
                         res.limbs.as_mut_ptr(),
                     );
                 }
@@ -99,8 +105,8 @@ impl Z for Bignum4096 {
             (true, false, true) => {
                 unsafe {
                     hacl_sys::Hacl_Bignum4096_sub(
-                        rhs.limbs.as_mut_ptr(),
-                        self.limbs.as_mut_ptr(),
+                        rhs.limbs.as_ptr() as *mut _,
+                        self.limbs.as_ptr() as *mut _,
                         res.limbs.as_mut_ptr(),
                     );
                 }
@@ -109,8 +115,8 @@ impl Z for Bignum4096 {
             (true, false, false) => {
                 unsafe {
                     hacl_sys::Hacl_Bignum4096_sub(
-                        self.limbs.as_mut_ptr(),
-                        rhs.limbs.as_mut_ptr(),
+                        self.limbs.as_ptr() as *mut _,
+                        rhs.limbs.as_ptr() as *mut _,
                         res.limbs.as_mut_ptr(),
                     );
                 }
@@ -119,8 +125,8 @@ impl Z for Bignum4096 {
             (false, true, true) => {
                 unsafe {
                     hacl_sys::Hacl_Bignum4096_sub(
-                        rhs.limbs.as_mut_ptr(),
-                        self.limbs.as_mut_ptr(),
+                        rhs.limbs.as_ptr() as *mut _,
+                        self.limbs.as_ptr() as *mut _,
                         res.limbs.as_mut_ptr(),
                     );
                 }
@@ -129,8 +135,8 @@ impl Z for Bignum4096 {
             (false, true, false) => {
                 unsafe {
                     hacl_sys::Hacl_Bignum4096_sub(
-                        self.limbs.as_mut_ptr(),
-                        rhs.limbs.as_mut_ptr(),
+                        self.limbs.as_ptr() as *mut _,
+                        rhs.limbs.as_ptr() as *mut _,
                         res.limbs.as_mut_ptr(),
                     );
                 }
@@ -140,7 +146,7 @@ impl Z for Bignum4096 {
         res
     }
 
-    fn sub(mut self, mut rhs: Self) -> Self {
+    fn sub(self, rhs: Self) -> Self {
         self.add(rhs.neg())
     }
 

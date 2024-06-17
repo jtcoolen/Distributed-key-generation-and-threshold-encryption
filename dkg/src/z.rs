@@ -16,9 +16,9 @@ pub trait Z {
 
     fn eq_abs(self, rhs: Self) -> bool;
 
-    fn less_than_abs(self, rhs: Self) -> bool;
+    fn less_than_abs(&self, rhs: &Self) -> bool;
 
-    fn less_than(self, rhs: Self) -> bool;
+    fn less_than(&self, rhs: &Self) -> bool;
 
     fn add(self, rhs: Self) -> Self;
 
