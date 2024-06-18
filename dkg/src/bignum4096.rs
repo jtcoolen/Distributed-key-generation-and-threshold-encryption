@@ -71,6 +71,7 @@ impl Z for Bignum4096 {
         res
     }
 
+    // TODO: is the inequality strict or not?
     fn less_than_abs(&self, rhs: &Self) -> bool {
         let lt: u64 = unsafe {
             hacl_sys::Hacl_Bignum4096_lt_mask(
@@ -226,7 +227,7 @@ impl Z for Bignum4096 {
         self.positive
     }
 
-    fn euclidean_div_ceil(self, other: Self) -> EuclideanDivResult<Self>
+    fn euclidean_div_ceil(&self, other: &Self) -> EuclideanDivResult<Self>
     where
         Self: Sized,
     {

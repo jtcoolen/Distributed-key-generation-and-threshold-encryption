@@ -12,11 +12,11 @@ where
 
     fn discriminant(&self) -> Z;
 
-    fn identity(self) -> Self;
+    fn identity(&self) -> Self;
 
-    fn normalize(self) -> Self;
+    fn normalize(&self) -> Self;
 
-    fn reduce(self) -> Self;
+    fn reduce(&self) -> Self;
 
     fn compose(self, other: Self) -> Self;
 
@@ -58,21 +58,20 @@ impl<Z: z::Z> BinaryQuadraticForm<Z> for BQF<Z> {
         self.b.sqr().sub(&Z::from(4).mul(&self.a.mul(&self.c)))
     }
 
-    fn identity(self) -> Self {
-        /*let disc = self.discriminant();
+    fn identity(&self) -> Self {
+        let disc = self.discriminant();
         let b = if self.b.is_odd() {
             Z::from(1)
         } else {
             Z::from(0)
         };
-        let mut c = self.b.sub(disc);
+        let mut c = self.b.sub(&disc);
         c.divide_by_4();
         BQF {
             a: Z::from(1),
             b,
             c,
-        }*/
-        todo!()
+        }
     }
 
     fn inverse(self) -> Self {
@@ -86,35 +85,37 @@ impl<Z: z::Z> BinaryQuadraticForm<Z> for BQF<Z> {
     // TODO check/test correctness and benchmark
     // TODO inplace operations?
     // TODO check for overflow
-    fn normalize(self) -> Self {
-        /*let z::EuclideanDivResult {
+    fn normalize(&self) -> Self {
+        let z::EuclideanDivResult {
             mut quotient,
             remainder,
-        } = self.b.euclidean_div_ceil(self.a);
+        } = self.b.euclidean_div_ceil(&self.a);
         let remainder = if quotient.is_odd() {
-            remainder.add(self.a)
+            remainder.add(&self.a)
         } else {
             remainder
         };
         quotient.divide_by_2();
-        let b = remainder;
-        let mut remainder = self.b.add(remainder);
+        let b = remainder.clone();
+        let mut remainder = self.b.add(&remainder);
         remainder.divide_by_2();
-        let c = self.c.sub(quotient.mul(remainder));
-        BQF { a: self.a, b, c }*/
-        todo!()
+        let c = self.c.sub(&quotient.mul(&remainder));
+        BQF {
+            a: self.a.clone(),
+            b,
+            c,
+        }
     }
 
-    fn reduce(self) -> Self {
-        /*let mut n = self.normalize();
-        while n.a.less_than_abs(n.c) {
+    fn reduce(&self) -> Self {
+        let mut n = self.normalize();
+        while n.a.less_than_abs(&n.c) {
             n = n.rho();
         }
-        if n.a.eq_abs(n.c) && !n.b.is_positive() {
+        if n.a.eq_abs(&n.c) && !n.b.is_positive() {
             n.b.oppose()
         }
-        n*/
-        todo!()
+        n
     }
 
     fn compose(self, other: Self) -> Self {
@@ -176,6 +177,7 @@ mod tests {
 
     #[test]
     fn test_discriminant() {
+        // TODO randomize test, use bicycl keygen function to generate valid binary quadratic form
         let a = "219211015245339659606923489058910718059300326777750522511052678189518994793540424066835449513550321156725825999213223313349543556000887051910142135883849284272371752572695727069191024343809964931675197912960671210283614957513396516801587047437150725164417736257899198555560707024341197521616471833363582196266114484743";
 
         let s: bicycl::cpp_std::cpp_core::CppBox<String> =
@@ -201,7 +203,7 @@ mod tests {
         let a_: cpp_core::Ref<Mpz> = unsafe { cpp_core::Ref::from_raw_ref(&a) };
         let b_: cpp_core::Ref<Mpz> = unsafe { cpp_core::Ref::from_raw_ref(&b) };
         let c_: cpp_core::Ref<Mpz> = unsafe { cpp_core::Ref::from_raw_ref(&c) };
-        let qfi = unsafe { bicycl::b_i_c_y_c_l::QFI::new_4a(a_, b_, c_, true) };
+        let qfi = unsafe { bicycl::b_i_c_y_c_l::QFI::new_4a(a_, b_, c_, false) };
 
         let s = unsafe { Ref::from_raw_ref(&qfi) };
 

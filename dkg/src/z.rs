@@ -42,7 +42,7 @@ pub trait Z {
 
     // rounds quotient towards +infinity
     // the remainder gets the opposite sign of the denominator
-    fn euclidean_div_ceil(self, other: Self) -> EuclideanDivResult<Self>
+    fn euclidean_div_ceil(&self, other: &Self) -> EuclideanDivResult<Self>
     where
         Self: Sized;
 
