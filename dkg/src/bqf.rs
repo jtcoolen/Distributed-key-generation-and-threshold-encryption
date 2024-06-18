@@ -320,4 +320,58 @@ mod tests {
         println!("qfi2={:?}, id={:?}", qfi2, qfi2.identity());
         assert!(qfi2.discriminant() == mpz_to_bignum(&mut disc))
     }
+
+    #[test]
+    fn test_normalize() {
+        // TODO randomize test, use bicycl keygen function to generate valid binary quadratic form
+        let a = "219211015245339659606923489058910718059300326777750522511052678189518994793540424066835449513550321156725825999213223313349543556000887051910142135883849284272371752572695727069191024343809964931675197912960671210283614957513396516801587047437150725164417736257899198555560707024341197521616471833363582196266114484743";
+
+        let s: bicycl::cpp_std::cpp_core::CppBox<String> =
+            unsafe { String::from_char_usize(a.as_ptr() as *const c_char, a.len()) };
+        let s: Ref<String> = unsafe { Ref::from_raw_ref(&s) };
+        let mut a = unsafe { b_i_c_y_c_l::Mpz::from_string(s) };
+
+        let b = "-81545512674410670486936176483359392564511873763104542618989110464161210362234569734599379968174823311559519130742888365338004517383649260007974211906536061358807858053200069189129489104433807401679673870588655431254253093929351305686001886690914729246160866675068623497789888497184276822188325873470578904605036981681";
+        let s: bicycl::cpp_std::cpp_core::CppBox<String> =
+            unsafe { String::from_char_usize(b.as_ptr() as *const c_char, b.len()) };
+        let s: Ref<String> = unsafe { Ref::from_raw_ref(&s) };
+        let mut b = unsafe { b_i_c_y_c_l::Mpz::from_string(s) };
+
+        let cc = unsafe { bicycl::cpp_vec_to_rust(&Mpz::mpz_to_b_i_g_bytes(&mut *b)) };
+        println!("sign={:?}", cc);
+
+        let c = "397911913619280235397607492118765996458330730701094047301004809429554024195731134066384833319157074257034700248114739847099306289375744183458513982780336763663761492062176352821924273594044341543655974705344319285820641420038042279276523776451336649974742547552579516047919797400613300929758921320569816271189292178311";
+        let s: bicycl::cpp_std::cpp_core::CppBox<String> =
+            unsafe { String::from_char_usize(c.as_ptr() as *const c_char, c.len()) };
+        let s: Ref<String> = unsafe { Ref::from_raw_ref(&s) };
+        let mut c = unsafe { b_i_c_y_c_l::Mpz::from_string(s) };
+
+        let a_: cpp_core::Ref<Mpz> = unsafe { cpp_core::Ref::from_raw_ref(&a) };
+        let b_: cpp_core::Ref<Mpz> = unsafe { cpp_core::Ref::from_raw_ref(&b) };
+        let c_: cpp_core::Ref<Mpz> = unsafe { cpp_core::Ref::from_raw_ref(&c) };
+        let qfi = unsafe { bicycl::b_i_c_y_c_l::QFI::new_4a(a_, b_, c_, false) };
+
+        let s = unsafe { Ref::from_raw_ref(&qfi) };
+
+        let mut disc = unsafe { b_i_c_y_c_l::QFI::discriminant(&s) };
+
+        let cc = unsafe { bicycl::cpp_vec_to_rust(&Mpz::mpz_to_b_i_g_bytes(&mut *disc)) };
+        println!("disc2={:?}", cc);
+
+        let aa = unsafe { bicycl::cpp_vec_to_rust(&Mpz::mpz_to_b_i_g_bytes(&mut *a)) };
+        println!("aa={:?}", aa);
+
+        println!("disc {:?}", mpz_to_bignum(&mut disc));
+
+        let qfi2 = super::BQF::new(
+            mpz_to_bignum(&mut a),
+            mpz_to_bignum(&mut b),
+            mpz_to_bignum(&mut c),
+        );
+
+        println!("qfi2={:?}", qfi2);
+        println!("qfi2={:?}, disc={:?}", qfi2, qfi2.normalize());
+        assert!(qfi2.discriminant() == mpz_to_bignum(&mut disc))
+    }
+
 }

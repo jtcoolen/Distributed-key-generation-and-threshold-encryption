@@ -378,6 +378,7 @@ dependencies = [
  "bytemuck",
  "criterion",
  "getrandom",
+ "gmp-mpfr-sys",
  "hacl",
  "hacl-sys",
  "libcrux",
@@ -490,6 +491,16 @@ name = "glob"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d2fabcfbdc87f4758337ca535fb41a6d701b65693ce38287d856d1674551ec9b"
+
+[[package]]
+name = "gmp-mpfr-sys"
+version = "1.6.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b0205cd82059bc63b63cf516d714352a30c44f2c74da9961dfda2617ae6b5918"
+dependencies = [
+ "libc",
+ "windows-sys",
+]
 
 [[package]]
 name = "group"

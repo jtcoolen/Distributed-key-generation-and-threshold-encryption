@@ -227,6 +227,8 @@ impl Z for Bignum4096 {
         self.positive
     }
 
+    // make call to mpn_sec_div_qr from gmp
+    // use https://docs.rs/gmp-mpfr-sys/latest/i686-unknown-linux-gnu/gmp_mpfr_sys/gmp/fn.mpn_sec_div_qr.html#
     fn euclidean_div_ceil(&self, other: &Self) -> EuclideanDivResult<Self>
     where
         Self: Sized,
