@@ -197,7 +197,7 @@ impl Z for Bignum4096 {
 
     fn divide_by_2(&mut self) {
         let mut carry: u64 = 0;
-        let shift = 64 - 1 as u8;
+        let shift = 63 as u8;
         for limb in self.limbs.iter_mut().rev() {
             let new_carry = *limb & 0b1;
             *limb = (*limb >> 1) | (carry << shift);
@@ -207,7 +207,7 @@ impl Z for Bignum4096 {
 
     fn divide_by_4(&mut self) {
         let mut carry: u64 = 0;
-        let shift = 64 - 1 as u8;
+        let shift = 62;
         for limb in self.limbs.iter_mut().rev() {
             let new_carry = *limb & 0b11;
             *limb = (*limb >> 2) | (carry << shift);
