@@ -16,3 +16,4 @@ hacl-sys = {git="https://github.com/jtcoolen/hacl-packages", rev="9d54a40edbbec7
 getrandom = { version = "0.2.15", features = ["js"] }
 rand_core = "0.9.0-alpha.1"
 bicycl = {git="https://github.com/hsaleemsupra/cgdkg_artifact.git"}
+bytemuck = "1.16.0"

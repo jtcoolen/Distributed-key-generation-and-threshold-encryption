@@ -10,7 +10,7 @@ where
 
     //fn random<R: CryptoRng>(rng: &mut R) -> Self;
 
-    fn discriminant(self) -> Z;
+    fn discriminant(&self) -> Z;
 
     fn identity(self) -> Self;
 
@@ -27,6 +27,7 @@ where
     fn inverse(self) -> Self;
 }
 
+#[derive(Debug)]
 #[warn(dead_code)]
 struct BQF<Z>
 where
@@ -53,8 +54,8 @@ impl<Z: z::Z> BinaryQuadraticForm<Z> for BQF<Z> {
         BQF { a, b, c }
     }
 
-    fn discriminant(self) -> Z {
-        self.b.sqr().sub(Z::from(4).mul(self.a.mul(self.c)))
+    fn discriminant(&self) -> Z {
+        self.b.sqr().sub(&Z::from(4).mul(&self.a.mul(&self.c)))
     }
 
     fn identity(self) -> Self {
@@ -145,14 +146,33 @@ mod tests {
     //use proptest::prelude::*;
 
     use bicycl::b_i_c_y_c_l::Mpz;
-    use bicycl::cpp_core::{self, Ref, SliceAsBeginEnd};
-    use bicycl::{b_i_c_y_c_l, cpp_core::CastInto, cpp_std::String};
+    use bicycl::cpp_core::{self, CppBox, Ref};
+    use bicycl::{b_i_c_y_c_l, cpp_std::String};
 
-    use std::ffi::CStr;
-    use std::ops::Deref;
     use std::os::raw::c_char;
 
+    use crate::bignum4096::Bignum4096;
+
     use super::*;
+
+    pub fn convert(v: Vec<u8>) -> [u64; 128] {
+        assert!(v.len() <= 512);
+        let mut array: [u8; 512] = [0; 512];
+        array[..v.len()].copy_from_slice(&v);
+        let cast: [u64; 64] = bytemuck::cast(array);
+        let mut res = [0u64; 128];
+        res[0..64].copy_from_slice(&cast);
+        res
+    }
+
+    fn mpz_to_bignum(n: &mut CppBox<Mpz>) -> Bignum4096 {
+        let mut limbs = unsafe { bicycl::cpp_vec_to_rust(&Mpz::mpz_to_b_i_g_bytes(&mut *n)) };
+        limbs.reverse();
+        Bignum4096 {
+            positive: unsafe { Mpz::sgn(&n) == 1 },
+            limbs: convert(limbs),
+        }
+    }
 
     #[test]
     fn test_discriminant() {
@@ -160,30 +180,49 @@ mod tests {
 
         let s: bicycl::cpp_std::cpp_core::CppBox<String> =
             unsafe { String::from_char_usize(a.as_ptr() as *const c_char, a.len()) };
-        let r = unsafe { s.as_ref() };
         let s: Ref<String> = unsafe { Ref::from_raw_ref(&s) };
-        let a = unsafe { b_i_c_y_c_l::Mpz::from_string(s) };
+        let mut a = unsafe { b_i_c_y_c_l::Mpz::from_string(s) };
 
         let b = "-81545512674410670486936176483359392564511873763104542618989110464161210362234569734599379968174823311559519130742888365338004517383649260007974211906536061358807858053200069189129489104433807401679673870588655431254253093929351305686001886690914729246160866675068623497789888497184276822188325873470578904605036981681";
         let s: bicycl::cpp_std::cpp_core::CppBox<String> =
             unsafe { String::from_char_usize(b.as_ptr() as *const c_char, b.len()) };
         let s: Ref<String> = unsafe { Ref::from_raw_ref(&s) };
-        let b = unsafe { b_i_c_y_c_l::Mpz::from_string(s) };
+        let mut b = unsafe { b_i_c_y_c_l::Mpz::from_string(s) };
+
+        let cc = unsafe { bicycl::cpp_vec_to_rust(&Mpz::mpz_to_b_i_g_bytes(&mut *b)) };
+        println!("sign={:?}", cc);
 
         let c = "397911913619280235397607492118765996458330730701094047301004809429554024195731134066384833319157074257034700248114739847099306289375744183458513982780336763663761492062176352821924273594044341543655974705344319285820641420038042279276523776451336649974742547552579516047919797400613300929758921320569816271189292178311";
         let s: bicycl::cpp_std::cpp_core::CppBox<String> =
             unsafe { String::from_char_usize(c.as_ptr() as *const c_char, c.len()) };
         let s: Ref<String> = unsafe { Ref::from_raw_ref(&s) };
-        let c = unsafe { b_i_c_y_c_l::Mpz::from_string(s) };
+        let mut c = unsafe { b_i_c_y_c_l::Mpz::from_string(s) };
 
-        let a: cpp_core::Ref<Mpz> = unsafe { cpp_core::Ref::from_raw_ref(&a) };
-        let b: cpp_core::Ref<Mpz> = unsafe { cpp_core::Ref::from_raw_ref(&b) };
-        let c: cpp_core::Ref<Mpz> = unsafe { cpp_core::Ref::from_raw_ref(&c) };
-        let qfi = unsafe { bicycl::b_i_c_y_c_l::QFI::new_4a(a, b, c, true) };
+        let a_: cpp_core::Ref<Mpz> = unsafe { cpp_core::Ref::from_raw_ref(&a) };
+        let b_: cpp_core::Ref<Mpz> = unsafe { cpp_core::Ref::from_raw_ref(&b) };
+        let c_: cpp_core::Ref<Mpz> = unsafe { cpp_core::Ref::from_raw_ref(&c) };
+        let qfi = unsafe { bicycl::b_i_c_y_c_l::QFI::new_4a(a_, b_, c_, true) };
+
         let s = unsafe { Ref::from_raw_ref(&qfi) };
-        let mut disc = unsafe { b_i_c_y_c_l::QFI::discriminant(&s) };
-        let res = unsafe { Mpz::mpz_to_b_i_g_bytes(&mut disc) };
 
-        println!("disc {:?}", unsafe { bicycl::cpp_vec_to_rust(res.deref()) })
+        let mut disc = unsafe { b_i_c_y_c_l::QFI::discriminant(&s) };
+
+        let cc = unsafe { bicycl::cpp_vec_to_rust(&Mpz::mpz_to_b_i_g_bytes(&mut *disc)) };
+        println!("disc2={:?}", cc);
+
+        let aa = unsafe { bicycl::cpp_vec_to_rust(&Mpz::mpz_to_b_i_g_bytes(&mut *a)) };
+        println!("aa={:?}", aa);
+
+        println!("disc {:?}", mpz_to_bignum(&mut disc));
+
+        let qfi2 = super::BQF::new(
+            mpz_to_bignum(&mut a),
+            mpz_to_bignum(&mut b),
+            mpz_to_bignum(&mut c),
+        );
+
+        println!("qfi2={:?}", qfi2);
+        println!("qfi2={:?}, disc={:?}", qfi2, qfi2.discriminant());
+        assert!(qfi2.discriminant() == mpz_to_bignum(&mut disc))
     }
 }
