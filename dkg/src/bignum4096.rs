@@ -1,3 +1,12 @@
+use bicycl::b_i_c_y_c_l::Mpz;
+use bicycl::cpp_core::CppBox;
+use bicycl::cpp_core::MutRef;
+use bicycl::cpp_core::Ref;
+use bicycl::cpp_std::VectorOfUchar;
+use gmp_mpfr_sys::gmp;
+use gmp_mpfr_sys::gmp::mpn_sec_div_qr;
+use gmp_mpfr_sys::gmp::mpz_cdiv_qr;
+use gmp_mpfr_sys::gmp::mpz_limbs_read;
 use rand_core::CryptoRng;
 
 use crate::z::EuclideanDivResult;
@@ -10,6 +19,55 @@ pub struct Bignum4096 {
     pub positive: bool,
     // we take 128 = 64 * 2 to hold the results of sqr and mul methods
     pub limbs: [u64; 128],
+}
+
+fn convert(v: Vec<u8>) -> [u64; 128] {
+    assert!(v.len() <= 512);
+    let mut array: [u8; 512] = [0; 512];
+    array[..v.len()].copy_from_slice(&v);
+    let cast: [u64; 64] = bytemuck::cast(array);
+    let mut res = [0u64; 128];
+    // TODO shouldn't this be 128?
+    res[0..64].copy_from_slice(&cast);
+    res
+}
+
+fn inverse_convert(array: [u64; 128]) -> Vec<u8> {
+    let cast: [u64; 64] = array[0..64]
+        .try_into()
+        .expect("slice with incorrect length");
+    let bytes: [u8; 512] = bytemuck::cast(cast);
+    let mut res = bytes.to_vec();
+    res.reverse();
+    res
+}
+
+fn mpz_to_bignum(n: &mut CppBox<Mpz>) -> Bignum4096 {
+    let mut limbs = unsafe { bicycl::cpp_vec_to_rust(&Mpz::mpz_to_b_i_g_bytes(&mut *n)) };
+    limbs.reverse();
+    Bignum4096 {
+        positive: unsafe { Mpz::sgn(&n) == 1 },
+        limbs: convert(limbs),
+    }
+}
+
+fn bignum_to_mpz(n: &Bignum4096) -> CppBox<Mpz> {
+    let limbs = n.limbs.clone();
+    //limbs.reverse();
+    // TODO we need to specify the sign in the vector of uchar
+    let limbs = inverse_convert(limbs);
+    let res = unsafe { bicycl::rust_vec_to_cpp(limbs) };
+    let res: Ref<VectorOfUchar> = unsafe { Ref::from_raw_ref(&res) };
+
+    let mut r = unsafe { Mpz::new() };
+    // let r: MutRef<Mpz> = unsafe { MutRef::from_raw_ref(&mut r) };
+    unsafe { Mpz::b_i_g_bytes_to_mpz(&mut r, res) };
+    // TODO not constant time!
+    if !n.positive {
+        unsafe { Mpz::neg(&mut r) }
+    }
+    // TODO do we need to clear manually the Mpz?
+    r
 }
 
 impl PartialEq for Bignum4096 {
@@ -233,6 +291,22 @@ impl Z for Bignum4096 {
     where
         Self: Sized,
     {
-        todo!()
+        let n = bignum_to_mpz(self);
+        let d = bignum_to_mpz(other);
+        let mut q = unsafe { Mpz::new() };
+        let mut r = unsafe { Mpz::new() };
+        let mutref_q: MutRef<Mpz> = unsafe { MutRef::from_raw_ref(&mut q) };
+        let mutref_r: MutRef<Mpz> = unsafe { MutRef::from_raw_ref(&mut r) };
+
+        // use gmp_mpfr_sys::gmp::mpn_sec
+        unsafe {
+            Mpz::cdiv_qr(mutref_q, mutref_r, &n, &d);
+        };
+        let quotient = mpz_to_bignum(&mut q);
+        let remainder = mpz_to_bignum(&mut r);
+        EuclideanDivResult {
+            quotient,
+            remainder,
+        }
     }
 }

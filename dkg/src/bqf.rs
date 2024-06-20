@@ -10,6 +10,8 @@ where
 
     //fn random<R: CryptoRng>(rng: &mut R) -> Self;
 
+    fn equals(&self, other: &Self) -> bool;
+
     fn discriminant(&self) -> Z;
 
     fn identity(&self) -> Self;
@@ -52,6 +54,10 @@ impl<Z: z::Z> BQF<Z> {
 impl<Z: z::Z> BinaryQuadraticForm<Z> for BQF<Z> {
     fn new(a: Z, b: Z, c: Z) -> Self {
         BQF { a, b, c }
+    }
+
+    fn equals(&self, other: &Self) -> bool {
+        self.a.eq(&other.a) && self.b.eq(&other.b) && self.c.eq(&other.c)
     }
 
     fn discriminant(&self) -> Z {
@@ -149,7 +155,7 @@ mod tests {
     use proptest_derive::Arbitrary;
 
     use bicycl::b_i_c_y_c_l::{ClassGroup, Mpz, QFI};
-    use bicycl::cpp_core::{self, CppBox, Ref};
+    use bicycl::cpp_core::{self, CppBox, MutRef, Ref};
     use bicycl::{b_i_c_y_c_l, cpp_std::String};
 
     use std::os::raw::c_char;
@@ -185,7 +191,7 @@ mod tests {
             unsafe { cpp_core::MutRef::from_raw_ref(&mut a_bytes) };
 
         unsafe { n.mpz_to_vector(mutref_a_bytes) };
-        let mut limbs = unsafe { bicycl::cpp_vec_to_rust(&mutref_a_bytes) };
+        let limbs = unsafe { bicycl::cpp_vec_to_rust(&mutref_a_bytes) };
         let mut limbs = limbs[1..].to_vec();
         println!("LIMBS={:?}", limbs);
         limbs.reverse();
@@ -349,7 +355,7 @@ mod tests {
         let a_: cpp_core::Ref<Mpz> = unsafe { cpp_core::Ref::from_raw_ref(&a) };
         let b_: cpp_core::Ref<Mpz> = unsafe { cpp_core::Ref::from_raw_ref(&b) };
         let c_: cpp_core::Ref<Mpz> = unsafe { cpp_core::Ref::from_raw_ref(&c) };
-        let qfi = unsafe { bicycl::b_i_c_y_c_l::QFI::new_4a(a_, b_, c_, false) };
+        let mut qfi = unsafe { bicycl::b_i_c_y_c_l::QFI::new_4a(a_, b_, c_, false) };
 
         let s = unsafe { Ref::from_raw_ref(&qfi) };
 
@@ -368,10 +374,36 @@ mod tests {
             mpz_to_bignum(&mut b),
             mpz_to_bignum(&mut c),
         );
+        unsafe { qfi.normalize_0a() };
+        unsafe { qfi.normalize_0a() };
+
+        let mut aaa = unsafe { Mpz::new() };
+        let _ = unsafe { Mpz::copy_from_mpz(&mut aaa, qfi.a()) };
+
+        let mut bbb = unsafe { Mpz::new() };
+        let _ = unsafe { Mpz::copy_from_mpz(&mut bbb, qfi.b()) };
+
+        let mut ccc = unsafe { Mpz::new() };
+        let _ = unsafe { Mpz::copy_from_mpz(&mut ccc, qfi.c()) };
+
+        let qfi3 = super::BQF::new(
+            mpz_to_bignum(&mut aaa),
+            mpz_to_bignum(&mut bbb),
+            mpz_to_bignum(&mut ccc),
+        );
 
         println!("qfi2={:?}", qfi2);
-        println!("qfi2={:?}, disc={:?}", qfi2, qfi2.normalize());
-        assert!(qfi2.discriminant() == mpz_to_bignum(&mut disc))
-    }
 
+        println!(
+            "norm={:?}, norm={:?}",
+            qfi3,
+            qfi2.normalize()
+                .normalize()
+                .normalize()
+                .normalize()
+                .normalize()
+                .normalize()
+        );
+        assert!(qfi3.equals(&qfi2));
+    }
 }
