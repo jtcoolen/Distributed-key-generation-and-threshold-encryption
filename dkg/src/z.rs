@@ -49,4 +49,6 @@ pub trait Z {
     fn oppose(&mut self);
 
     fn is_positive(&self) -> bool;
+
+    fn root(&self, n: u32) -> Self;
 }

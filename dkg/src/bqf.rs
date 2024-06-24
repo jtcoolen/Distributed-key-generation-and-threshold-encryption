@@ -125,6 +125,7 @@ impl<Z: z::Z> BinaryQuadraticForm<Z> for BQF<Z> {
     }
 
     fn compose(self, other: Self) -> Self {
+        // https://www.ams.org/journals/mcom/2003-72-244/S0025-5718-03-01518-7/S0025-5718-03-01518-7.pdf
         todo!()
     }
 
@@ -137,6 +138,7 @@ impl<Z: z::Z> BinaryQuadraticForm<Z> for BQF<Z> {
     }
 
     // TODO (harder): implement compose, double, pow
+    // reverse-engineer their implementation
     //https://gite.lirmm.fr/crypto/bicycl/-/blob/master/src/bicycl/qfi.inl?ref_type=heads#L621
 
     // TODO (less of a priority): compute class group number
