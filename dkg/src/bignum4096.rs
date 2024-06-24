@@ -1,17 +1,11 @@
-use bicycl::b_i_c_y_c_l::Mpz;
-use bicycl::cpp_core::CppBox;
-use bicycl::cpp_core::MutRef;
-use bicycl::cpp_core::Ref;
-use bicycl::cpp_std::VectorOfUchar;
-use gmp_mpfr_sys::gmp;
-use gmp_mpfr_sys::gmp::mpn_sec_div_qr;
-use gmp_mpfr_sys::gmp::mpz_cdiv_qr;
-use gmp_mpfr_sys::gmp::mpz_limbs_read;
 use rand_core::CryptoRng;
+// TODO: Rug is using floats! Replace by "raw" GMP bindings
 use rug::ops::NegAssign;
+use rug::Complete;
 use rug::Integer;
 
 use crate::z::EuclideanDivResult;
+use crate::z::ExtendedGCDResult;
 use crate::z::Z;
 
 /// Signed integer with range (-2^4096, 2^4096)
@@ -280,5 +274,50 @@ impl Z for Bignum4096 {
         let mut x = from_bignum4096(self);
         Integer::root_mut(&mut x, n);
         to_bignum4096(&x)
+    }
+
+    /// Implements the partial extended GCD from https://eprint.iacr.org/2022/1466.pdf
+    /// Basically Lehmer's variant that's truncated until the remainders get lower than the upper bound
+    /// https://gite.lirmm.fr/crypto/bicycl/-/blob/master/src/bicycl/gmp_extras.inl?ref_type=heads#L1232
+    /// see https://eprint.iacr.org/2021/1292.pdf (reported to be constant-time)
+    /// https://perso.ens-lyon.fr/damien.stehle/downloads/recbinary.pdf (less efficient, just for curiosity)
+    /// sounds nice A Double-Digit Lehmer-Euclid Algorithm for Finding the GCD of Long Integers TUDOR JEBELEAN
+    /// PROBABLY GO WITH GMP LEHMER'S IMPLEM
+    /// For now let's go with a naive extended GCD with euclidean divisions! let's start with something working first
+    /// TODO then abstract method using primitives from Z only
+    fn partial_extended_gcd(
+        &self,
+        other: &Self,
+        bezout_coefficients_upper_bound: &Self,
+    ) -> crate::z::ExtendedGCDResult<Self>
+    where
+        Self: Sized,
+    {
+        let upper_bound = from_bignum4096(bezout_coefficients_upper_bound);
+        let mut r = from_bignum4096(self); // a
+        let mut r_next = from_bignum4096(other); // b
+                                                 // intermediate Bézout coefficients for a
+        let mut u = Integer::ONE.clone();
+        let mut u_next = Integer::ZERO.clone();
+        // intermediate Bézout coefficients for b
+        let mut v = Integer::ZERO.clone();
+        let mut v_next = Integer::ONE.clone();
+
+        loop {
+            let (q, rem) = r.div_rem_ref(&r_next).complete();
+            r = rem;
+            u -= &q * &u_next;
+            v -= &q * &v_next;
+            std::mem::swap(&mut r, &mut r_next);
+            std::mem::swap(&mut u, &mut u_next);
+            std::mem::swap(&mut v, &mut v_next);
+            if v <= upper_bound && u <= upper_bound {
+                break;
+            }
+        }
+        ExtendedGCDResult {
+            bezout_coeff_1: to_bignum4096(&u),
+            bezout_coeff_2: to_bignum4096(&v),
+        }
     }
 }

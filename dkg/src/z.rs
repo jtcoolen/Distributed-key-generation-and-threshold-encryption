@@ -5,6 +5,11 @@ pub struct EuclideanDivResult<Z> {
     pub remainder: Z,
 }
 
+pub struct ExtendedGCDResult<Z> {
+    pub bezout_coeff_1: Z,
+    pub bezout_coeff_2: Z,
+}
+
 pub trait Z {
     fn zero() -> Self;
 
@@ -51,4 +56,12 @@ pub trait Z {
     fn is_positive(&self) -> bool;
 
     fn root(&self, n: u32) -> Self;
+
+    fn partial_extended_gcd(
+        &self,
+        other: &Self,
+        bezout_coefficients_upper_bound: &Self,
+    ) -> ExtendedGCDResult<Self>
+    where
+        Self: Sized;
 }

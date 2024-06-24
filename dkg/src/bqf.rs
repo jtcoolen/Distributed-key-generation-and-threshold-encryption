@@ -124,8 +124,47 @@ impl<Z: z::Z> BinaryQuadraticForm<Z> for BQF<Z> {
         n
     }
 
+    /// https://www.ams.org/journals/mcom/2003-72-244/S0025-5718-03-01518-7/S0025-5718-03-01518-7.pdf
+    /// Quadratic form (u,v,w)=uX^2+vXY+wY^2
+    /// How to compose two forms (u1,v1,w1) and (u2,v2,w2) of same discriminant D < 0?
+    /// (so in the same class group)
+    ///
+    /// By computing the 2x4 matrix
+    /// M = [Ax Bx Cx Dx; Ay By Cy Dy]
+    /// with the following constraints:
+    /// - Ax = [gcd(u1,u2,(v1+v2)/2) =: G]
+    /// - Ay = 0
+    /// - By = u1/Ax
+    /// - Cy = u2/Ax
+    /// - Dy = [(v1+v2)/(2*Ax) =: s]
+    /// - [m := -(v1-v2)/2] = Bx*Cx-By*Cx
+    /// - w1 = Cx*Dy-Cy*Dx
+    /// - w2 = Bx*Dy-By*Dx
+    ///
+    /// The composition of the two forms is then
+    /// (u3,v3,w3) = (By*Cy-Ay*Dy, (Ax*Dy+Ay*Dx)-(Bx*Cy+By*Cx), Bx*Cx-Ax*Dx)
+    ///
+    /// How to compute M concretely?
+    /// Using Atkins' refinement
+    ///
+    /// 1. Compute G, Bx and By
+    /// 2. Extended GCD on Bx and By: Bx*bx+By*by=gcd(Bx,By) until bx and by
+    /// both are at most ceil(|D|^1/4)
+    /// 3. this gives us the first two columns of M: [G; 0] and [bx; by]
+    /// 4. then the remaining coefficients are given by
+    /// If bx != 0:
+    /// - cx = bx*u2/u1-m*ax/u1
+    /// - cy = by*cx/bx+m/bx
+    /// - dx = bx*s/u1-w2*ax/u1
+    /// - dy = dx*ay/ax+s/dy
+    /// If bx = 0 then [w1 0 -s u2] is orthogonal to both rows of M:
+    /// that is the following equalities on the inner products
+    /// ax*w1-cx*s+dx*u2 = 0
+    /// ay*w1-cy*s+dx*u2 = 0
+    /// give us
+    /// dx = (cx*s-ax*w1)/u2
+    /// cy = (dx*u2+ay*w1)/s
     fn compose(self, other: Self) -> Self {
-        // https://www.ams.org/journals/mcom/2003-72-244/S0025-5718-03-01518-7/S0025-5718-03-01518-7.pdf
         todo!()
     }
 
