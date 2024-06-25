@@ -57,6 +57,12 @@ pub trait Z {
 
     fn root(&self, n: u32) -> Self;
 
+    fn gcd(&self, other: &Self) -> Self;
+
+    fn extended_gcd(&self, other: &Self) -> (Self, Self, Self)
+    where
+        Self: Sized;
+
     fn partial_extended_gcd(
         &self,
         other: &Self,
@@ -64,4 +70,16 @@ pub trait Z {
     ) -> ExtendedGCDResult<Self>
     where
         Self: Sized;
+
+    fn divide_exact(&self, other: &Self) -> Self;
+
+    fn divides(&self, other: &Self) -> bool;
+
+    fn add_mod(&self, other: &Self, modulo: &Self) -> Self;
+
+    fn take_mod(&self, modulo: &Self) -> Self;
+
+    fn mul_mod(&self, other: &Self, modulo: &Self) -> Self;
+
+    fn set_sign(&mut self, positive: bool);
 }

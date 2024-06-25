@@ -1,12 +1,16 @@
 //use rand_core::CryptoRng;
 
-use crate::z;
+use crate::z::{self, ExtendedGCDResult};
 
 trait BinaryQuadraticForm<Z>
 where
     Z: crate::z::Z,
 {
     fn new(a: Z, b: Z, c: Z) -> Self;
+
+    fn a(&self) -> Z;
+    fn b(&self) -> Z;
+    fn c(&self) -> Z;
 
     //fn random<R: CryptoRng>(rng: &mut R) -> Self;
 
@@ -20,7 +24,108 @@ where
 
     fn reduce(&self) -> Self;
 
-    fn compose(self, other: Self) -> Self;
+    /// https://www.ams.org/journals/mcom/2003-72-244/S0025-5718-03-01518-7/S0025-5718-03-01518-7.pdf
+    /// Quadratic form (u,v,w)=uX^2+vXY+wY^2
+    /// How to compose two forms (u1,v1,w1) and (u2,v2,w2) of same discriminant D < 0?
+    /// (so in the same class group)
+    ///
+    /// By computing the 2x4 matrix
+    /// M = [Ax Bx Cx Dx; Ay By Cy Dy]
+    /// with the following constraints:
+    /// - Ax = [gcd(u1,u2,(v1+v2)/2) =: G]
+    /// - Ay = 0
+    /// - By = u1/Ax
+    /// - Cy = u2/Ax
+    /// - Dy = [(v1+v2)/2 =: s] / Ax
+    /// - [m := -(v1-v2)/2] = Bx*Cy-By*Cx
+    /// - w1 = Cx*Dy-Cy*Dx
+    /// - w2 = Bx*Dy-By*Dx
+    ///
+    /// The composition of the two forms is then
+    /// (u3,v3,w3) = (By*Cy-Ay*Dy, (Ax*Dy+Ay*Dx)-(Bx*Cy+By*Cx), Bx*Cx-Ax*Dx)
+    ///
+    /// How to compute M concretely?
+    /// Using Atkins' refinement
+    ///
+    /// 1. Compute G, Bx and By
+    /// 2. Extended GCD on Bx and By: Bx*bx+By*by=gcd(Bx,By) until bx and by
+    /// both are at most ceil(|D|^1/4)
+    /// 3. this gives us the first two columns of M: [G; 0] and [bx; by]
+    /// 4. then the remaining coefficients are given by
+    /// If bx != 0:
+    /// - cx = (bx*u2-m*ax)/u1
+    /// - cy = (by*cx+m)/bx
+    /// - dx = (bx*s-w2*ax)/u1
+    /// - dy = (dx*ay+s)/ax
+    /// If bx = 0 then [w1 0 -s u2] is orthogonal to both rows of M:
+    /// that is the following equalities on the inner products
+    /// ax*w1-cx*s+dx*u2 = 0
+    /// ay*w1-cy*s+dy*u2 = 0
+    /// give us
+    /// dx = (cx*s-ax*w1)/u2
+    /// cy = (dy*u2+ay*w1)/s
+    /// "Gives a form very close to reduced"
+    /// TODO: it would be interesting to see how to make this constant-time
+    /// TODO note to self: I could use ChatGPT to obtain a rust skeleton given a pseudocode and work from there
+    fn compose(&self, other: &Self) -> Self
+    where
+        Self: Sized,
+    {
+        // TODO: compare against https://gite.lirmm.fr/crypto/bicycl/-/blob/master/src/bicycl/qfi.inl?ref_type=heads#L621
+        // looks like they avoid computing some variables depending on the case
+        let mut s = self.b().add(&other.b());
+        s.divide_by_2();
+        let g = self.a().gcd(&other.a()).gcd(&s);
+        let ay = Z::zero();
+        let by = self.a().divide_exact(&g);
+        let mut m = other.b().sub(&self.b());
+        m.divide_by_2();
+        let (f, b, c) = other.a().extended_gcd(&self.a());
+        let (ax, bx) = if f.eq(&Z::from(1)) || f.divides(&s) {
+            (g, m.mul(&b))
+        } else {
+            // first Bezout coefficient is not used, could be worth looking into not computing it in the xgcd
+            let (g, _x, y) = f.extended_gcd(&s);
+            let h = f.divide_exact(&g);
+            let l = b
+                .mul_mod(&self.c(), &h)
+                .add_mod(&c.mul_mod(&other.c(), &h), &h)
+                .mul_mod(&y, &h);
+            let bx = b
+                .mul(&m)
+                .divide_exact(&h)
+                .add(&l.mul(&self.a().divide_exact(&f)));
+            (g, bx)
+        };
+        // TODO cache upper bound in class group struct/trait
+        let mut upper_bound = self.discriminant();
+        upper_bound.set_sign(true);
+        let upper_bound = upper_bound.root(4);
+        let ExtendedGCDResult {
+            bezout_coeff_1,
+            bezout_coeff_2,
+        } = bx.partial_extended_gcd(&by, &upper_bound);
+        // now, bx = bezout_coeff1 and by = bezout_coeff_2
+        let bx = bezout_coeff_1;
+        let by = bezout_coeff_2;
+        let cx = bx.mul(&other.a()).sub(&m.mul(&ax)).divide_exact(&self.a());
+        let dx = bx.mul(&s).sub(&ax.mul(&other.c())).divide_exact(&self.a());
+        let dy = dx.mul(&ay).add(&s).divide_exact(&ax);
+
+        let cy = if bx.eq(&Z::from(0)) {
+            dy.mul(&other.a()).add(&ay.mul(&self.c())).divide_exact(&s)
+        } else {
+            by.mul(&cx).add(&m).divide_exact(&bx)
+        };
+
+        let a = by.mul(&cy).sub(&ay.mul(&dy));
+        let b = ax
+            .mul(&dy)
+            .add(&ay.mul(&dx))
+            .sub(&bx.mul(&cy).add(&by.mul(&cx)));
+        let c = bx.mul(&cx).sub(&ax.mul(&dx));
+        Self::new(a, b, c)
+    }
 
     fn double(self) -> Self;
 
@@ -54,6 +159,18 @@ impl<Z: z::Z> BQF<Z> {
 impl<Z: z::Z> BinaryQuadraticForm<Z> for BQF<Z> {
     fn new(a: Z, b: Z, c: Z) -> Self {
         BQF { a, b, c }
+    }
+
+    fn a(&self) -> Z {
+        self.a.clone()
+    }
+
+    fn b(&self) -> Z {
+        self.b.clone()
+    }
+
+    fn c(&self) -> Z {
+        self.c.clone()
     }
 
     fn equals(&self, other: &Self) -> bool {
@@ -122,50 +239,6 @@ impl<Z: z::Z> BinaryQuadraticForm<Z> for BQF<Z> {
             n.b.oppose()
         }
         n
-    }
-
-    /// https://www.ams.org/journals/mcom/2003-72-244/S0025-5718-03-01518-7/S0025-5718-03-01518-7.pdf
-    /// Quadratic form (u,v,w)=uX^2+vXY+wY^2
-    /// How to compose two forms (u1,v1,w1) and (u2,v2,w2) of same discriminant D < 0?
-    /// (so in the same class group)
-    ///
-    /// By computing the 2x4 matrix
-    /// M = [Ax Bx Cx Dx; Ay By Cy Dy]
-    /// with the following constraints:
-    /// - Ax = [gcd(u1,u2,(v1+v2)/2) =: G]
-    /// - Ay = 0
-    /// - By = u1/Ax
-    /// - Cy = u2/Ax
-    /// - Dy = [(v1+v2)/(2*Ax) =: s]
-    /// - [m := -(v1-v2)/2] = Bx*Cx-By*Cx
-    /// - w1 = Cx*Dy-Cy*Dx
-    /// - w2 = Bx*Dy-By*Dx
-    ///
-    /// The composition of the two forms is then
-    /// (u3,v3,w3) = (By*Cy-Ay*Dy, (Ax*Dy+Ay*Dx)-(Bx*Cy+By*Cx), Bx*Cx-Ax*Dx)
-    ///
-    /// How to compute M concretely?
-    /// Using Atkins' refinement
-    ///
-    /// 1. Compute G, Bx and By
-    /// 2. Extended GCD on Bx and By: Bx*bx+By*by=gcd(Bx,By) until bx and by
-    /// both are at most ceil(|D|^1/4)
-    /// 3. this gives us the first two columns of M: [G; 0] and [bx; by]
-    /// 4. then the remaining coefficients are given by
-    /// If bx != 0:
-    /// - cx = bx*u2/u1-m*ax/u1
-    /// - cy = by*cx/bx+m/bx
-    /// - dx = bx*s/u1-w2*ax/u1
-    /// - dy = dx*ay/ax+s/dy
-    /// If bx = 0 then [w1 0 -s u2] is orthogonal to both rows of M:
-    /// that is the following equalities on the inner products
-    /// ax*w1-cx*s+dx*u2 = 0
-    /// ay*w1-cy*s+dx*u2 = 0
-    /// give us
-    /// dx = (cx*s-ax*w1)/u2
-    /// cy = (dx*u2+ay*w1)/s
-    fn compose(self, other: Self) -> Self {
-        todo!()
     }
 
     fn double(self) -> Self {

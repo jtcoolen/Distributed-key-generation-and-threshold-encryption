@@ -276,6 +276,22 @@ impl Z for Bignum4096 {
         to_bignum4096(&x)
     }
 
+    fn gcd(&self, other: &Self) -> Self {
+        let a = from_bignum4096(self);
+        let b = from_bignum4096(other);
+        to_bignum4096(&a.gcd(&b))
+    }
+
+    fn extended_gcd(&self, other: &Self) -> (Self, Self, Self)
+    where
+        Self: Sized,
+    {
+        let a = from_bignum4096(self);
+        let b = from_bignum4096(other);
+        let (g, u, v) = a.extended_gcd_ref(&b).complete();
+        (to_bignum4096(&g), to_bignum4096(&u), to_bignum4096(&v))
+    }
+
     /// Implements the partial extended GCD from https://eprint.iacr.org/2022/1466.pdf
     /// Basically Lehmer's variant that's truncated until the remainders get lower than the upper bound
     /// https://gite.lirmm.fr/crypto/bicycl/-/blob/master/src/bicycl/gmp_extras.inl?ref_type=heads#L1232
@@ -296,7 +312,7 @@ impl Z for Bignum4096 {
         let upper_bound = from_bignum4096(bezout_coefficients_upper_bound);
         let mut r = from_bignum4096(self); // a
         let mut r_next = from_bignum4096(other); // b
-                                                 // intermediate Bézout coefficients for a
+        // intermediate Bézout coefficients for a
         let mut u = Integer::ONE.clone();
         let mut u_next = Integer::ZERO.clone();
         // intermediate Bézout coefficients for b
@@ -319,5 +335,51 @@ impl Z for Bignum4096 {
             bezout_coeff_1: to_bignum4096(&u),
             bezout_coeff_2: to_bignum4096(&v),
         }
+    }
+
+    fn divide_exact(&self, other: &Self) -> Self {
+        let a = from_bignum4096(self);
+        let b = from_bignum4096(other);
+        to_bignum4096(&a.div_exact(&b))
+    }
+
+    fn divides(&self, other: &Self) -> bool {
+        let a = from_bignum4096(self);
+        let b = from_bignum4096(other);
+        b.is_divisible(&a)
+    }
+
+    // TODO: recheck if we can use hacl star implem (yes we can)
+    fn add_mod(&self, other: &Self, modulo: &Self) -> Self {
+        let mut res = Self::zero();
+        unsafe {
+            hacl_sys::Hacl_Bignum4096_add_mod(
+                modulo.limbs.as_ptr() as *mut _,
+                self.limbs.as_ptr() as *mut _,
+                other.limbs.as_ptr() as *mut _,
+                res.limbs.as_mut_ptr(),
+            );
+        }
+        res
+    }
+
+    fn take_mod(&self, modulo: &Self) -> Self {
+        let mut res = Self::zero();
+        unsafe {
+            hacl_sys::Hacl_Bignum4096_mod(
+                modulo.limbs.as_ptr() as *mut _,
+                self.limbs.as_ptr() as *mut _,
+                res.limbs.as_mut_ptr(),
+            );
+        }
+        res
+    }
+
+    fn mul_mod(&self, other: &Self, modulo: &Self) -> Self {
+        self.mul(other).take_mod(modulo)
+    }
+
+    fn set_sign(&mut self, positive: bool) {
+        self.positive = positive;
     }
 }
