@@ -382,4 +382,8 @@ impl Z for Bignum4096 {
     fn set_sign(&mut self, positive: bool) {
         self.positive = positive;
     }
+
+    fn solve_congruence(&self, other: &Self, modulo: &Self) -> Self {
+        todo!()
+    }
 }

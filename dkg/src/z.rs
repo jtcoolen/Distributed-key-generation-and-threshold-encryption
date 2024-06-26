@@ -82,4 +82,7 @@ pub trait Z {
     fn mul_mod(&self, other: &Self, modulo: &Self) -> Self;
 
     fn set_sign(&mut self, positive: bool);
+
+    // TODO abstract implementation
+    fn solve_congruence(&self, other: &Self, modulo: &Self) -> Self;
 }
