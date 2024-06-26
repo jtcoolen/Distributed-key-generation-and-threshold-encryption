@@ -82,8 +82,10 @@ where
         m.divide_by_2();
         let (f, b, c) = other.a().extended_gcd(&self.a());
         let (ax, bx) = if f.eq(&Z::from(1)) || f.divides(&s) {
+            println!("FAST TRACK");
             (g, m.mul(&b))
         } else {
+            println!("SLOWER TRACK");
             // first Bezout coefficient is not used, could be worth looking into not computing it in the xgcd
             let (g, _x, y) = f.extended_gcd(&s);
             let h = f.divide_exact(&g);
@@ -522,6 +524,8 @@ mod tests {
         assert!(qfi3.equals(&qfi2));
     }
 
+    // TODO test reduce
+
     #[test]
     fn test_compose() {
         // TODO randomize test, use bicycl keygen function to generate valid binary quadratic form
@@ -604,8 +608,8 @@ mod tests {
 
         println!(
             "compose BICYCL={:?}\ncompose={:?}",
-            qfi3,
-            qfi2.compose(&qfi2)
+            qfi3.normalize().reduce().reduce().reduce().reduce().reduce().reduce(),
+            qfi2.compose(&qfi2).normalize().reduce().reduce().reduce().reduce().reduce().reduce()
         );
         assert!(qfi3.equals(&qfi2));
     }

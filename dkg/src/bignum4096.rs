@@ -34,6 +34,10 @@ fn from_bignum4096(n: &Bignum4096) -> Integer {
 fn to_bignum4096(n: &Integer) -> Bignum4096 {
     let digits = n.to_digits::<u64>(rug::integer::Order::Lsf);
     let mut limbs = [0u64; 128];
+    // TODO this would panic if digits.len() is greater than 128
+    // Seems to not be the case because we're working with integers fitting inside 128 u64s
+    // Though that should be checked
+    // Otherwise we should implement the reduce and normalize operations with unbounded integers
     limbs[0..digits.len()].copy_from_slice(&digits);
     Bignum4096 {
         positive: n.is_positive(),
