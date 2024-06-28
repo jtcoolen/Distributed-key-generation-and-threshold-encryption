@@ -1,6 +1,9 @@
 use rand_core::CryptoRng;
+use rug::ops::AddFrom;
+use rug::ops::DivRoundingFrom;
 // TODO: Rug is using floats! Replace by "raw" GMP bindings
 use rug::ops::NegAssign;
+use rug::ops::SubFrom;
 use rug::Complete;
 use rug::Integer;
 
@@ -296,6 +299,9 @@ impl Z for Bignum4096 {
         (to_bignum4096(&g), to_bignum4096(&u), to_bignum4096(&v))
     }
 
+
+    // NEW PLAN: Implement compose from Chia VDF paper
+
     /// Implements the partial extended GCD from https://eprint.iacr.org/2022/1466.pdf
     /// Basically Lehmer's variant that's truncated until the remainders get lower than the upper bound
     /// https://gite.lirmm.fr/crypto/bicycl/-/blob/master/src/bicycl/gmp_extras.inl?ref_type=heads#L1232
@@ -305,6 +311,8 @@ impl Z for Bignum4096 {
     /// PROBABLY GO WITH GMP LEHMER'S IMPLEM
     /// For now let's go with a naive extended GCD with euclidean divisions! let's start with something working first
     /// TODO then abstract method using primitives from Z only
+    /// Actually the expected result is https://www.ams.org/journals/mcom/2008-77-261/S0025-5718-07-02017-0/S0025-5718-07-02017-0.pdf
+    /// // Algo HGCD-D
     fn partial_extended_gcd(
         &self,
         other: &Self,
@@ -314,30 +322,31 @@ impl Z for Bignum4096 {
         Self: Sized,
     {
         let upper_bound = from_bignum4096(bezout_coefficients_upper_bound);
+
         let mut r = from_bignum4096(self); // a
         let mut r_next = from_bignum4096(other); // b
-        // intermediate Bézout coefficients for a
-        let mut u = Integer::ONE.clone();
-        let mut u_next = Integer::ZERO.clone();
+
         // intermediate Bézout coefficients for b
         let mut v = Integer::ZERO.clone();
         let mut v_next = Integer::ONE.clone();
 
+        let mut i: u64 = 0;
         loop {
-            let (q, rem) = r.div_rem_ref(&r_next).complete();
-            r = rem;
-            u -= &q * &u_next;
-            v -= &q * &v_next;
-            std::mem::swap(&mut r, &mut r_next);
-            std::mem::swap(&mut u, &mut u_next);
-            std::mem::swap(&mut v, &mut v_next);
-            if v <= upper_bound && u <= upper_bound {
+            if Integer::abs_ref(&r).complete() <= upper_bound && (i-1) % 2 == 0 {
                 break;
             }
+            let (q, rem) = r.div_rem_ref(&r_next).complete();
+            r = rem;
+            v -= &q * &v_next;
+            std::mem::swap(&mut r, &mut r_next);
+            std::mem::swap(&mut v, &mut v_next);
+            i = i + 1;
         }
         ExtendedGCDResult {
-            bezout_coeff_1: to_bignum4096(&u),
-            bezout_coeff_2: to_bignum4096(&v),
+            bezout_coeff_1: to_bignum4096(&v),
+            bezout_coeff_2: to_bignum4096(&v_next),
+            remainder: to_bignum4096(&r),
+            remainder_next: to_bignum4096(&r_next),
         }
     }
 

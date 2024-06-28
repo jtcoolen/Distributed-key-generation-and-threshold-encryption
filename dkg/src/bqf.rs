@@ -25,6 +25,8 @@ where
     fn reduce(&self) -> Self;
 
     /// https://www.ams.org/journals/mcom/2003-72-244/S0025-5718-03-01518-7/S0025-5718-03-01518-7.pdf
+    /// Also see http://tomlr.free.fr/Math%E9matiques/Math%20Complete/Number%20theory/A%20course%20in%20computational%20algebraic%20number%20theory%20-%20Cohen%20H..pdf
+    /// Page 249 algo 5.4.9 (looks like BICYCL implements it almost verbatim)
     /// Quadratic form (u,v,w)=uX^2+vXY+wY^2
     /// How to compose two forms (u1,v1,w1) and (u2,v2,w2) of same discriminant D < 0?
     /// (so in the same class group)
@@ -66,7 +68,6 @@ where
     /// cy = (dy*u2+ay*w1)/s
     /// "Gives a form very close to reduced"
     /// TODO: it would be interesting to see how to make this constant-time
-    /// TODO note to self: I could use ChatGPT to obtain a rust skeleton given a pseudocode and work from there
     fn compose(&self, other: &Self) -> Self
     where
         Self: Sized,
@@ -75,17 +76,12 @@ where
         // looks like they avoid computing some variables depending on the case
         let mut s = self.b().add(&other.b());
         s.divide_by_2();
-        let g = self.a().gcd(&other.a()).gcd(&s);
-        let ay = Z::zero();
-        let by = self.a().divide_exact(&g);
-        let mut m = other.b().sub(&self.b());
-        m.divide_by_2();
+        let m = other.b().sub(&s);
         let (f, b, c) = other.a().extended_gcd(&self.a());
-        let (ax, bx) = if f.eq(&Z::from(1)) || f.divides(&s) {
-            println!("FAST TRACK");
-            (g, m.mul(&b))
+        let (ax, bx, by) = if f.eq(&Z::from(1)) || f.divides(&s) {
+            let by = self.a().divide_exact(&f);
+            (f, m.mul(&b), by)
         } else {
-            println!("SLOWER TRACK");
             // first Bezout coefficient is not used, could be worth looking into not computing it in the xgcd
             let (g, _x, y) = f.extended_gcd(&s);
             let h = f.divide_exact(&g);
@@ -93,45 +89,66 @@ where
                 .mul_mod(&self.c(), &h)
                 .add_mod(&c.mul_mod(&other.c(), &h), &h)
                 .mul_mod(&y, &h);
-            let bx = b
-                .mul(&m)
-                .divide_exact(&h)
-                .add(&l.mul(&self.a().divide_exact(&f)));
-            (g, bx)
+            let by = self.a().divide_exact(&g);
+            let bx = b.mul(&m).add(&l.mul(&by)).divide_exact(&h);
+            (g, bx, by)
         };
+        let cy = other.a().divide_exact(&ax);
+        let dy = s.divide_exact(&ax);
         // TODO cache upper bound in class group struct/trait
         let mut upper_bound = self.discriminant();
         upper_bound.set_sign(true);
+        //upper_bound.divide_by_4();
         let upper_bound = upper_bound.root(4);
         let ExtendedGCDResult {
             bezout_coeff_1,
             bezout_coeff_2,
+            remainder,
+            remainder_next,
         } = bx.partial_extended_gcd(&by, &upper_bound);
-        // now, bx = bezout_coeff1 and by = bezout_coeff_2
-        let bx = bezout_coeff_1;
-        let by = bezout_coeff_2;
-        let cx = bx.mul(&other.a()).sub(&m.mul(&ax)).divide_exact(&self.a());
-        let dx = bx.mul(&s).sub(&ax.mul(&other.c())).divide_exact(&self.a());
-        let dy = dx.mul(&ay).add(&s).divide_exact(&ax);
+
+
+        //  assert!(remainder.mul(&bezout_coeff_1).add(&remainder_next.mul(&bezout_coeff_2)).eq(&by));
+
+        let bx = remainder;
+        let by_ = remainder_next;
+
+        let ay = bezout_coeff_1.mul(&ax).neg();
+
+        let cx = bx.mul(&cy).sub(&m.mul(&bezout_coeff_2)).divide_exact(&by);
 
         let cy = if bx.eq_abs(&Z::from(0)) {
-            dy.mul(&other.a()).add(&ay.mul(&self.c())).divide_exact(&s)
+            by_.mul(&other.a()).sub(&ay.mul(&m)).divide_exact(&self.a())
         } else {
-            by.mul(&cx).add(&m).divide_exact(&bx)
+            by_.mul(&cx).add(&m).divide_exact(&bx)
         };
 
-        let a = by.mul(&cy).sub(&ay.mul(&dy));
+        let dx = bx
+            .mul(&dy)
+            .sub(&bezout_coeff_2.mul(&other.c()))
+            .divide_exact(&by);
+
+        let dy = dy
+            .sub(&dx.mul(&bezout_coeff_1))
+            .divide_exact(&bezout_coeff_2);
+
+        let ax = bezout_coeff_2.mul(&ax);
+
+        let a = by_.mul(&cy).sub(&ay.mul(&dy));
         let b = ax
             .mul(&dy)
             .add(&ay.mul(&dx))
-            .sub(&bx.mul(&cy).add(&by.mul(&cx)));
+            .sub(&bx.mul(&cy).add(&by_.mul(&cx)));
         let c = bx.mul(&cx).sub(&ax.mul(&dx));
-        Self::new(a, b, c)
+        Self::new(a, b, c).reduce()
     }
 
     // For squaring https://www.michaelstraka.com/posts/classgroups/
     // optimization if discriminant is negative of a prime
-    fn double(&self) -> Self where Self: Sized {
+    fn double(&self) -> Self
+    where
+        Self: Sized,
+    {
         todo!()
     }
 
@@ -576,8 +593,8 @@ mod tests {
         unsafe { qfi.normalize_0a() };
         unsafe { qfi.normalize_0a() };
 
-        let mut res = unsafe{QFI::new_0a()};
-        let mutref_res: cpp_core::MutRef<QFI> = unsafe {cpp_core::MutRef::from_raw_ref(&mut res)};
+        let mut res = unsafe { QFI::new_0a() };
+        let mutref_res: cpp_core::MutRef<QFI> = unsafe { cpp_core::MutRef::from_raw_ref(&mut res) };
 
         let cl = unsafe { ClassGroup::new(&disc) };
 
@@ -595,7 +612,7 @@ mod tests {
         let mut ccc = unsafe { Mpz::new() };
         let _ = unsafe { Mpz::copy_from_mpz(&mut ccc, res.c()) };
 
-         let qfi3 = super::BQF::new(
+        let qfi3 = super::BQF::new(
             mpz_to_bignum(&mut aaa),
             mpz_to_bignum(&mut bbb),
             mpz_to_bignum(&mut ccc),
@@ -608,8 +625,23 @@ mod tests {
 
         println!(
             "compose BICYCL={:?}\ncompose={:?}",
-            qfi3.normalize().reduce().reduce().reduce().reduce().reduce().reduce(),
-            qfi2.compose(&qfi2).normalize().reduce().reduce().reduce().reduce().reduce().reduce()
+            qfi3.normalize()
+                .reduce()
+                .reduce()
+                .reduce()
+                .reduce()
+                .reduce()
+                .reduce()
+                .reduce(),
+            qfi2.compose(&qfi2)
+                .normalize()
+                .reduce()
+                .reduce()
+                .reduce()
+                .reduce()
+                .reduce()
+                .reduce()
+                .reduce()
         );
         assert!(qfi3.equals(&qfi2));
     }

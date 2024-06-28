@@ -8,6 +8,8 @@ pub struct EuclideanDivResult<Z> {
 pub struct ExtendedGCDResult<Z> {
     pub bezout_coeff_1: Z,
     pub bezout_coeff_2: Z,
+    pub remainder: Z,
+    pub remainder_next: Z,
 }
 
 pub trait Z {
