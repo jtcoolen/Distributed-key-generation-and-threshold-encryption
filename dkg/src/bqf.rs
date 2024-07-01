@@ -4,9 +4,9 @@ use crate::z::{self, ExtendedGCDResult};
 
 trait BinaryQuadraticForm<Z>
 where
-    Z: crate::z::Z,
+    Z: crate::z::Z + std::fmt::Debug,
 {
-    fn new(a: Z, b: Z, c: Z) -> Self;
+    fn new(a: &Z, b: &Z, c: &Z) -> Self;
 
     fn a(&self) -> Z;
     fn b(&self) -> Z;
@@ -66,72 +66,47 @@ where
     /// cy = (dy*u2+ay*w1)/s
     /// "Gives a form very close to reduced"
     /// TODO: it would be interesting to see how to make this constant-time
-    /// TODO note to self: I could use ChatGPT to obtain a rust skeleton given a pseudocode and work from there
     fn compose(&self, other: &Self) -> Self
     where
         Self: Sized,
     {
-        // TODO: compare against https://gite.lirmm.fr/crypto/bicycl/-/blob/master/src/bicycl/qfi.inl?ref_type=heads#L621
-        // looks like they avoid computing some variables depending on the case
-        let mut s = self.b().add(&other.b());
-        s.divide_by_2();
-        let g = self.a().gcd(&other.a()).gcd(&s);
-        let ay = Z::zero();
-        let by = self.a().divide_exact(&g);
-        let mut m = other.b().sub(&self.b());
-        m.divide_by_2();
-        let (f, b, c) = other.a().extended_gcd(&self.a());
-        let (ax, bx) = if f.eq(&Z::from(1)) || f.divides(&s) {
-            println!("FAST TRACK");
-            (g, m.mul(&b))
-        } else {
-            println!("SLOWER TRACK");
-            // first Bezout coefficient is not used, could be worth looking into not computing it in the xgcd
-            let (g, _x, y) = f.extended_gcd(&s);
-            let h = f.divide_exact(&g);
-            let l = b
-                .mul_mod(&self.c(), &h)
-                .add_mod(&c.mul_mod(&other.c(), &h), &h)
-                .mul_mod(&y, &h);
-            let bx = b
-                .mul(&m)
-                .divide_exact(&h)
-                .add(&l.mul(&self.a().divide_exact(&f)));
-            (g, bx)
-        };
-        // TODO cache upper bound in class group struct/trait
-        let mut upper_bound = self.discriminant();
-        upper_bound.set_sign(true);
-        let upper_bound = upper_bound.root(4);
-        let ExtendedGCDResult {
-            bezout_coeff_1,
-            bezout_coeff_2,
-        } = bx.partial_extended_gcd(&by, &upper_bound);
-        // now, bx = bezout_coeff1 and by = bezout_coeff_2
-        let bx = bezout_coeff_1;
-        let by = bezout_coeff_2;
-        let cx = bx.mul(&other.a()).sub(&m.mul(&ax)).divide_exact(&self.a());
-        let dx = bx.mul(&s).sub(&ax.mul(&other.c())).divide_exact(&self.a());
-        let dy = dx.mul(&ay).add(&s).divide_exact(&ax);
-
-        let cy = if bx.eq_abs(&Z::from(0)) {
-            dy.mul(&other.a()).add(&ay.mul(&self.c())).divide_exact(&s)
-        } else {
-            by.mul(&cx).add(&m).divide_exact(&bx)
-        };
-
-        let a = by.mul(&cy).sub(&ay.mul(&dy));
-        let b = ax
-            .mul(&dy)
-            .add(&ay.mul(&dx))
-            .sub(&bx.mul(&cy).add(&by.mul(&cx)));
-        let c = bx.mul(&cx).sub(&ax.mul(&dx));
-        Self::new(a, b, c)
+        let mut g = self.b().add(&other.b());
+        g.divide_by_2();
+        let w = self.a().gcd(&other.a()).gcd(&g);
+        let mut h = other.b().sub(&self.b());
+        h.divide_by_2();
+        let j = w.clone();
+        let s = self.a().divide_exact(&w);
+        let t = other.a().divide_exact(&w);
+        let u = g.divide_exact(&w);
+        let st = s.mul(&t);
+        println!("ST={:?}", st);
+        let (mu, nu) = t.mul_mod(&u, &st).solve_congruence(
+            &h.mul_mod(&u, &st).add_mod(&s.mul_mod(&self.c(), &st), &st),
+            &st,
+        );
+        let (lambda, _) = t
+            .mul_mod(&nu, &s)
+            .solve_congruence(&h.sub_mod(&t.mul_mod(&mu, &s), &s), &s);
+        let k = mu.add(&nu.mul(&lambda));
+        let l = k.mul(&t).sub(&h).divide_exact(&s);
+        let m = t
+            .mul(&u)
+            .mul(&k)
+            .sub(&h.mul(&u))
+            .sub(&self.c().mul(&s))
+            .divide_exact(&st);
+        let b = j.mul(&u).sub(&k.mul(&t)).sub(&l.mul(&s));
+        let c = k.mul(&l).sub(&j.mul(&m));
+        Self::new(&st, &b, &c).reduce().reduce().reduce()
     }
 
     // For squaring https://www.michaelstraka.com/posts/classgroups/
     // optimization if discriminant is negative of a prime
-    fn double(&self) -> Self where Self: Sized {
+    fn double(&self) -> Self
+    where
+        Self: Sized,
+    {
         todo!()
     }
 
@@ -140,7 +115,7 @@ where
     fn inverse(self) -> Self;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[warn(dead_code)]
 struct BQF<Z>
 where
@@ -151,7 +126,7 @@ where
     c: Z,
 }
 
-impl<Z: z::Z> BQF<Z> {
+impl<Z: z::Z + std::fmt::Debug> BQF<Z> {
     fn rho(self) -> Self {
         BQF {
             a: self.c,
@@ -162,9 +137,13 @@ impl<Z: z::Z> BQF<Z> {
     }
 }
 
-impl<Z: z::Z> BinaryQuadraticForm<Z> for BQF<Z> {
-    fn new(a: Z, b: Z, c: Z) -> Self {
-        BQF { a, b, c }
+impl<Z: z::Z + std::fmt::Debug> BinaryQuadraticForm<Z> for BQF<Z> {
+    fn new(a: &Z, b: &Z, c: &Z) -> Self {
+        BQF {
+            a: a.clone(),
+            b: b.clone(),
+            c: c.clone(),
+        }
     }
 
     fn a(&self) -> Z {
@@ -273,13 +252,59 @@ mod tests {
     use bicycl::b_i_c_y_c_l::{ClassGroup, Mpz, QFI};
     use bicycl::cpp_core::{self, CppBox, MutRef, Ref};
     use bicycl::{b_i_c_y_c_l, cpp_std::String};
+    use rug::ops::NegAssign;
     use rug::Integer;
+    use z::Z;
 
     use std::os::raw::c_char;
 
     use crate::bignum4096::Bignum4096;
 
     use super::*;
+
+    fn normalize2<Z: z::Z>(x: BQF<Z>) -> BQF<Z> {
+        // assume delta<0 and a>0
+        let a_sub_b = x.a.sub(&x.b);
+        let s_f = a_sub_b.div_floor(Z::from(2).mul(&x.a));
+
+        BQF {
+            a: x.a.clone(),
+            b: x.b.add(&Z::from(2).mul(&s_f).mul(&x.a)),
+            c: x.a.mul(&s_f.sqr()).add(&x.b.mul(&s_f)).add(&x.c),
+        }
+    }
+
+    pub fn rho2<Z: z::Z>(x: &BQF<Z>) -> BQF<Z> {
+        let qf_new = BQF {
+            a: x.c.clone(),
+            b: x.b.clone().neg(),
+            c: x.a.clone(),
+        };
+
+        normalize2(qf_new)
+    }
+
+    fn is_normal2<Z: z::Z>(x: &BQF<Z>) -> bool {
+        x.b.less_than(&x.a) && !(x.b.less_than(&x.a.neg()))
+    }
+
+    fn is_reduced2<Z: z::Z>(x: &BQF<Z>) -> bool {
+        is_normal2(x) && x.a.less_than(&x.c) && !(x.a.eq(&x.c) && x.b.less_than(&Z::zero()))
+    }
+
+    pub fn reduce2<Z: z::Z + Clone>(x: BQF<Z>) -> BQF<Z> {
+        let mut h: BQF<Z>;
+        let mut h_new = x.clone();
+        if !is_normal2(&x) {
+            h_new = normalize2(x);
+        }
+        h = h_new;
+        while !is_reduced2(&h) {
+            let h_new = rho2(&h);
+            h = h_new;
+        }
+        h
+    }
 
     pub fn convert(v: Vec<u8>) -> [u64; 128] {
         assert!(v.len() <= 512);
@@ -292,13 +317,28 @@ mod tests {
     }
 
     fn mpz_to_bignum(n: &mut CppBox<Mpz>) -> Bignum4096 {
-        let mut limbs = unsafe { bicycl::cpp_vec_to_rust(&Mpz::mpz_to_b_i_g_bytes(&mut *n)) };
+        let limbs = unsafe { bicycl::cpp_vec_to_rust(&Mpz::mpz_to_b_i_g_bytes(&mut *n)) };
+
+        let mut limbs = limbs.clone();
 
         limbs.reverse();
         Bignum4096 {
-            positive: unsafe { Mpz::sgn(&n) == 1 },
-            limbs: convert(limbs),
+            positive: unsafe { Mpz::sgn(&n) == 1 }.clone(),
+            limbs: convert(limbs).clone(),
         }
+    }
+
+    fn mpz_to_bignum1(n: &Mpz) -> Integer {
+        let x = mpz_to_bignum2(n);
+        let limbs = x.limbs;
+
+        //limbs.reverse();
+        let mut x = Integer::from_digits(&limbs, rug::integer::Order::Lsf);
+        let sg = unsafe { Mpz::sgn(&n) == 1 };
+        if !sg {
+            x.neg_assign()
+        }
+        x
     }
 
     fn mpz_to_bignum2(n: &Mpz) -> Bignum4096 {
@@ -360,17 +400,17 @@ mod tests {
         let aa = unsafe { bicycl::cpp_vec_to_rust(&Mpz::mpz_to_b_i_g_bytes(&mut *a)) };
         println!("aa={:?}", aa);
 
-        println!("disc {:?}", mpz_to_bignum(&mut disc));
+        println!("disc {:?}", mpz_to_bignum1(&mut disc));
 
         let qfi2 = super::BQF::new(
-            mpz_to_bignum(&mut a),
-            mpz_to_bignum(&mut b),
-            mpz_to_bignum(&mut c),
+            &mpz_to_bignum1(&mut a),
+            &mpz_to_bignum1(&mut b),
+            &mpz_to_bignum1(&mut c),
         );
 
         println!("qfi2={:?}", qfi2);
         println!("qfi2={:?}, disc={:?}", qfi2, qfi2.discriminant());
-        assert!(qfi2.discriminant() == mpz_to_bignum(&mut disc))
+        assert!(qfi2.discriminant() == mpz_to_bignum1(&mut disc))
     }
 
     #[test]
@@ -414,12 +454,12 @@ mod tests {
         let aa = unsafe { bicycl::cpp_vec_to_rust(&Mpz::mpz_to_b_i_g_bytes(&mut *a)) };
         println!("aa={:?}", aa);
 
-        println!("disc {:?}", mpz_to_bignum(&mut disc));
+        println!("disc {:?}", mpz_to_bignum1(&mut disc));
 
         let qfi2 = super::BQF::new(
-            mpz_to_bignum(&mut a),
-            mpz_to_bignum(&mut b),
-            mpz_to_bignum(&mut c),
+            &mpz_to_bignum1(&mut a),
+            &mpz_to_bignum1(&mut b),
+            &mpz_to_bignum1(&mut c),
         );
 
         let cl = unsafe { b_i_c_y_c_l::ClassGroup::new(&disc) };
@@ -435,13 +475,19 @@ mod tests {
             mpz_to_bignum2(&b),
             mpz_to_bignum2(&c),
         );
-        assert!(mpz_to_bignum2(&a) == qfi2.identity().a);
-        assert!(mpz_to_bignum2(&b) == qfi2.identity().b);
-        assert!(mpz_to_bignum2(&c) == qfi2.identity().c);
+        assert!(mpz_to_bignum1(&a) == qfi2.identity().a);
+        assert!(mpz_to_bignum1(&b) == qfi2.identity().b);
+        assert!(mpz_to_bignum1(&c) == qfi2.identity().c);
 
         println!("qfi2={:?}", qfi2);
         println!("qfi2={:?}, id={:?}", qfi2, qfi2.identity());
-        assert!(qfi2.discriminant() == mpz_to_bignum(&mut disc))
+
+        println!(
+            "disc qfi2={:?}, disc={:?}",
+            qfi2.discriminant(),
+            mpz_to_bignum1(&mut disc)
+        );
+        assert!(qfi2.discriminant() == mpz_to_bignum1(&mut disc))
     }
 
     #[test]
@@ -487,9 +533,9 @@ mod tests {
         println!("disc {:?}", mpz_to_bignum(&mut disc));
 
         let qfi2 = super::BQF::new(
-            mpz_to_bignum(&mut a),
-            mpz_to_bignum(&mut b),
-            mpz_to_bignum(&mut c),
+            &mpz_to_bignum(&mut a),
+            &mpz_to_bignum(&mut b),
+            &mpz_to_bignum(&mut c),
         );
         unsafe { qfi.normalize_0a() };
         unsafe { qfi.normalize_0a() };
@@ -504,9 +550,9 @@ mod tests {
         let _ = unsafe { Mpz::copy_from_mpz(&mut ccc, qfi.c()) };
 
         let qfi3 = super::BQF::new(
-            mpz_to_bignum(&mut aaa),
-            mpz_to_bignum(&mut bbb),
-            mpz_to_bignum(&mut ccc),
+            &mpz_to_bignum(&mut aaa),
+            &mpz_to_bignum(&mut bbb),
+            &mpz_to_bignum(&mut ccc),
         );
 
         println!("qfi2={:?}", qfi2);
@@ -569,22 +615,25 @@ mod tests {
         println!("disc {:?}", mpz_to_bignum(&mut disc));
 
         let qfi2 = super::BQF::new(
-            mpz_to_bignum(&mut a),
-            mpz_to_bignum(&mut b),
-            mpz_to_bignum(&mut c),
+            &mpz_to_bignum1(&mut a),
+            &mpz_to_bignum1(&mut b),
+            &mpz_to_bignum1(&mut c),
         );
         unsafe { qfi.normalize_0a() };
         unsafe { qfi.normalize_0a() };
 
-        let mut res = unsafe{QFI::new_0a()};
-        let mutref_res: cpp_core::MutRef<QFI> = unsafe {cpp_core::MutRef::from_raw_ref(&mut res)};
+        let mut res = unsafe { QFI::new_0a() };
+        //let mutref_res: cpp_core::MutRef<QFI> = unsafe { cpp_core::MutRef::from_raw_ref(&mut res) };
 
         let cl = unsafe { ClassGroup::new(&disc) };
 
-        unsafe { cl.nucomp(mutref_res, &qfi, &qfi) };
-        let mut d = unsafe { QFI::discriminant(&qfi) };
+        unsafe { cl.nucomp(&mut res, &qfi, &qfi) };
 
-        let d = mpz_to_bignum(&mut d);
+        unsafe { res.normalize_0a() };
+        let mut d = unsafe { QFI::discriminant(&qfi) };
+        assert!(mpz_to_bignum1(&d) == mpz_to_bignum1(&mut disc));
+
+        //let d = mpz_to_bignum(&mut d);
 
         let mut aaa = unsafe { Mpz::new() };
         let _ = unsafe { Mpz::copy_from_mpz(&mut aaa, res.a()) };
@@ -595,22 +644,25 @@ mod tests {
         let mut ccc = unsafe { Mpz::new() };
         let _ = unsafe { Mpz::copy_from_mpz(&mut ccc, res.c()) };
 
-         let qfi3 = super::BQF::new(
-            mpz_to_bignum(&mut aaa),
-            mpz_to_bignum(&mut bbb),
-            mpz_to_bignum(&mut ccc),
+        let qfi3 = super::BQF::new(
+            &mpz_to_bignum1(&mut aaa),
+            &mpz_to_bignum1(&mut bbb),
+            &mpz_to_bignum1(&mut ccc),
         );
         println!("disc={:?}, disc={:?}", d, qfi3.discriminant());
-        let d = Integer::from_digits(&qfi2.discriminant().limbs, rug::integer::Order::Lsf);
 
-        println!("D={}", -d);
+        let comp = qfi2.compose(&qfi2);
+        let dd = comp.discriminant();
+
+        assert!(mpz_to_bignum1(&d) == dd);
+        println!("D={}", dd);
         println!("qfi2={:?}", qfi2);
 
-        println!(
-            "compose BICYCL={:?}\ncompose={:?}",
-            qfi3.normalize().reduce().reduce().reduce().reduce().reduce().reduce(),
-            qfi2.compose(&qfi2).normalize().reduce().reduce().reduce().reduce().reduce().reduce()
-        );
-        assert!(qfi3.equals(&qfi2));
+        let comp_bicycl = qfi3;
+
+        let comp = reduce2(reduce2(qfi2.compose(&qfi2)));
+
+        println!("compose BICYCL={:?}\ncompose={:?}", comp_bicycl, comp);
+        assert!(comp_bicycl.equals(&comp));
     }
 }

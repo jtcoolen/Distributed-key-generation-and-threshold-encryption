@@ -1,11 +1,11 @@
 use rand_core::CryptoRng;
+use rug::ops::DivRoundingAssign;
 // TODO: Rug is using floats! Replace by "raw" GMP bindings
 use rug::ops::NegAssign;
 use rug::Complete;
 use rug::Integer;
 
 use crate::z::EuclideanDivResult;
-use crate::z::ExtendedGCDResult;
 use crate::z::Z;
 
 /// Signed integer with range (-2^4096, 2^4096)
@@ -274,6 +274,13 @@ impl Z for Bignum4096 {
         }
     }
 
+    fn div_floor(&self, other: Self) -> Self {
+        let mut x = from_bignum4096(self);
+        let o = from_bignum4096(&other);
+        x.div_floor_assign(o);
+        to_bignum4096(&x)
+    }
+
     fn root(&self, n: u32) -> Self {
         let mut x = from_bignum4096(self);
         Integer::root_mut(&mut x, n);
@@ -305,7 +312,7 @@ impl Z for Bignum4096 {
     /// PROBABLY GO WITH GMP LEHMER'S IMPLEM
     /// For now let's go with a naive extended GCD with euclidean divisions! let's start with something working first
     /// TODO then abstract method using primitives from Z only
-    fn partial_extended_gcd(
+    /*fn partial_extended_gcd(
         &self,
         other: &Self,
         bezout_coefficients_upper_bound: &Self,
@@ -316,7 +323,7 @@ impl Z for Bignum4096 {
         let upper_bound = from_bignum4096(bezout_coefficients_upper_bound);
         let mut r = from_bignum4096(self); // a
         let mut r_next = from_bignum4096(other); // b
-        // intermediate Bézout coefficients for a
+                                                 // intermediate Bézout coefficients for a
         let mut u = Integer::ONE.clone();
         let mut u_next = Integer::ZERO.clone();
         // intermediate Bézout coefficients for b
@@ -339,7 +346,7 @@ impl Z for Bignum4096 {
             bezout_coeff_1: to_bignum4096(&u),
             bezout_coeff_2: to_bignum4096(&v),
         }
-    }
+    }*/
 
     fn divide_exact(&self, other: &Self) -> Self {
         let a = from_bignum4096(self);
@@ -367,6 +374,19 @@ impl Z for Bignum4096 {
         res
     }
 
+    fn sub_mod(&self, other: &Self, modulo: &Self) -> Self {
+        let mut res = Self::zero();
+        unsafe {
+            hacl_sys::Hacl_Bignum4096_sub_mod(
+                modulo.limbs.as_ptr() as *mut _,
+                self.limbs.as_ptr() as *mut _,
+                other.limbs.as_ptr() as *mut _,
+                res.limbs.as_mut_ptr(),
+            );
+        }
+        res
+    }
+
     fn take_mod(&self, modulo: &Self) -> Self {
         let mut res = Self::zero();
         unsafe {
@@ -385,9 +405,5 @@ impl Z for Bignum4096 {
 
     fn set_sign(&mut self, positive: bool) {
         self.positive = positive;
-    }
-
-    fn solve_congruence(&self, other: &Self, modulo: &Self) -> Self {
-        todo!()
     }
 }
