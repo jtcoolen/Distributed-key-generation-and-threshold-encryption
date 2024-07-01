@@ -107,9 +107,19 @@ where
     where
         Self: Sized,
     {
-        todo!()
+        let (mu, _) = self.b()
+            .solve_congruence(&self.c(), &self.a());
+        let a = self.a().sqr();
+        let b  = self.b().sub(&Z::from(2).mul(&self.a()).mul(&mu));
+        let rhs = self.b().mul(&mu).sub(&self.c()).divide_exact(&self.a());
+        let c = mu.sqr().sub(&rhs);
+        Self::new(&a, &b, &c)
     }
 
+    // We can use double and add with Shamir's window trick (q-ary decomposition)
+    // See https://gite.lirmm.fr/crypto/bicycl/-/blob/master/src/bicycl/qfi.inl?ref_type=heads#L1162
+    // https://github.com/jtcoolen/GLV_arkworks/blob/main/src/lib.rs#L84
+    // https://github.com/jtcoolen/asymmetric_crypto/blob/master/elliptic_curves/ec_elgamal_codage_decodage.gp#L100
     fn pow(self, exponent: Z) -> Self;
 
     fn inverse(self) -> Self;
