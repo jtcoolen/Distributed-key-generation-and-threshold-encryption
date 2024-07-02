@@ -107,10 +107,9 @@ where
     where
         Self: Sized,
     {
-        let (mu, _) = self.b()
-            .solve_congruence(&self.c(), &self.a());
+        let (mu, _) = self.b().solve_congruence(&self.c(), &self.a());
         let a = self.a().sqr();
-        let b  = self.b().sub(&Z::from(2).mul(&self.a()).mul(&mu));
+        let b = self.b().sub(&Z::from(2).mul(&self.a()).mul(&mu));
         let rhs = self.b().mul(&mu).sub(&self.c()).divide_exact(&self.a());
         let c = mu.sqr().sub(&rhs);
         Self::new(&a, &b, &c)
@@ -674,5 +673,99 @@ mod tests {
 
         println!("compose BICYCL={:?}\ncompose={:?}", comp_bicycl, comp);
         assert!(comp_bicycl.equals(&comp));
+    }
+
+    #[test]
+    fn test_squaring() {
+        // TODO randomize test, use bicycl keygen function to generate valid binary quadratic form
+        let a = "219211015245339659606923489058910718059300326777750522511052678189518994793540424066835449513550321156725825999213223313349543556000887051910142135883849284272371752572695727069191024343809964931675197912960671210283614957513396516801587047437150725164417736257899198555560707024341197521616471833363582196266114484743";
+
+        let s: bicycl::cpp_std::cpp_core::CppBox<String> =
+            unsafe { String::from_char_usize(a.as_ptr() as *const c_char, a.len()) };
+        let s: Ref<String> = unsafe { Ref::from_raw_ref(&s) };
+        let mut a = unsafe { b_i_c_y_c_l::Mpz::from_string(s) };
+
+        let b = "-81545512674410670486936176483359392564511873763104542618989110464161210362234569734599379968174823311559519130742888365338004517383649260007974211906536061358807858053200069189129489104433807401679673870588655431254253093929351305686001886690914729246160866675068623497789888497184276822188325873470578904605036981681";
+        let s: bicycl::cpp_std::cpp_core::CppBox<String> =
+            unsafe { String::from_char_usize(b.as_ptr() as *const c_char, b.len()) };
+        let s: Ref<String> = unsafe { Ref::from_raw_ref(&s) };
+        let mut b = unsafe { b_i_c_y_c_l::Mpz::from_string(s) };
+
+        let cc = unsafe { bicycl::cpp_vec_to_rust(&Mpz::mpz_to_b_i_g_bytes(&mut *b)) };
+        println!("sign={:?}", cc);
+
+        let c = "397911913619280235397607492118765996458330730701094047301004809429554024195731134066384833319157074257034700248114739847099306289375744183458513982780336763663761492062176352821924273594044341543655974705344319285820641420038042279276523776451336649974742547552579516047919797400613300929758921320569816271189292178311";
+        let s: bicycl::cpp_std::cpp_core::CppBox<String> =
+            unsafe { String::from_char_usize(c.as_ptr() as *const c_char, c.len()) };
+        let s: Ref<String> = unsafe { Ref::from_raw_ref(&s) };
+        let mut c = unsafe { b_i_c_y_c_l::Mpz::from_string(s) };
+
+        let a_: cpp_core::Ref<Mpz> = unsafe { cpp_core::Ref::from_raw_ref(&a) };
+        let b_: cpp_core::Ref<Mpz> = unsafe { cpp_core::Ref::from_raw_ref(&b) };
+        let c_: cpp_core::Ref<Mpz> = unsafe { cpp_core::Ref::from_raw_ref(&c) };
+        let mut qfi = unsafe { bicycl::b_i_c_y_c_l::QFI::new_4a(a_, b_, c_, false) };
+
+        let s = unsafe { Ref::from_raw_ref(&qfi) };
+
+        let mut disc = unsafe { b_i_c_y_c_l::QFI::discriminant(&s) };
+
+        let cc = unsafe { bicycl::cpp_vec_to_rust(&Mpz::mpz_to_b_i_g_bytes(&mut *disc)) };
+        println!("disc2={:?}", cc);
+
+        let aa = unsafe { bicycl::cpp_vec_to_rust(&Mpz::mpz_to_b_i_g_bytes(&mut *a)) };
+        println!("aa={:?}", aa);
+
+        println!("disc {:?}", mpz_to_bignum(&mut disc));
+
+        let qfi2 = super::BQF::new(
+            &mpz_to_bignum1(&mut a),
+            &mpz_to_bignum1(&mut b),
+            &mpz_to_bignum1(&mut c),
+        );
+        unsafe { qfi.normalize_0a() };
+        unsafe { qfi.normalize_0a() };
+
+        let mut res = unsafe { QFI::new_0a() };
+        //let mutref_res: cpp_core::MutRef<QFI> = unsafe { cpp_core::MutRef::from_raw_ref(&mut res) };
+
+        let cl = unsafe { ClassGroup::new(&disc) };
+
+        unsafe { cl.nudupl(&mut res, &qfi) };
+
+        unsafe { res.normalize_0a() };
+        let d = unsafe { QFI::discriminant(&qfi) };
+        assert!(mpz_to_bignum1(&d) == mpz_to_bignum1(&mut disc));
+
+        //let d = mpz_to_bignum(&mut d);
+
+        let mut aaa = unsafe { Mpz::new() };
+        let _ = unsafe { Mpz::copy_from_mpz(&mut aaa, res.a()) };
+
+        let mut bbb = unsafe { Mpz::new() };
+        let _ = unsafe { Mpz::copy_from_mpz(&mut bbb, res.b()) };
+
+        let mut ccc = unsafe { Mpz::new() };
+        let _ = unsafe { Mpz::copy_from_mpz(&mut ccc, res.c()) };
+
+        let qfi3 = super::BQF::new(
+            &mpz_to_bignum1(&mut aaa),
+            &mpz_to_bignum1(&mut bbb),
+            &mpz_to_bignum1(&mut ccc),
+        );
+        println!("disc={:?}, disc={:?}", d, qfi3.discriminant());
+
+        let comp = qfi2.compose(&qfi2);
+        let dd = comp.discriminant();
+
+        assert!(mpz_to_bignum1(&d) == dd);
+        println!("D={}", dd);
+        println!("qfi2={:?}", qfi2);
+
+        let dupl_bicycl = qfi3;
+
+        let dupl = reduce2(reduce2(qfi2.double()));
+
+        println!("double BICYCL={:?}\ndouble={:?}", dupl_bicycl, dupl);
+        assert!(dupl_bicycl.equals(&dupl));
     }
 }
