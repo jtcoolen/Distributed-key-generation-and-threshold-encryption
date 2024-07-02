@@ -60,10 +60,6 @@ impl Z for Bignum4096 {
         }
     }
 
-    fn clone(&self) -> Self {
-        Clone::clone(&self)
-    }
-
     // returns a positive integer sampled uniformly at random
     fn random<R: CryptoRng>(rng: &mut R) -> Self {
         let mut limbs = [0u64; 128];
@@ -405,5 +401,13 @@ impl Z for Bignum4096 {
 
     fn set_sign(&mut self, positive: bool) {
         self.positive = positive;
+    }
+
+    fn bit_size(&self) -> u64 {
+        todo!()
+    }
+
+    fn get_bit(&self, index: u64) -> bool {
+        todo!()
     }
 }

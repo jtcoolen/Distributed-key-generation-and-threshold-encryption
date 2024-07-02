@@ -17,8 +17,6 @@ pub trait Z {
 
     fn from(n: u64) -> Self;
 
-    fn clone(&self) -> Self;
-
     fn random<R: CryptoRng>(rng: &mut R) -> Self;
 
     fn eq_abs(&self, rhs: &Self) -> bool;
@@ -105,4 +103,8 @@ pub trait Z {
     }
 
     fn div_floor(&self, other: Self) -> Self;
+
+    fn bit_size(&self) -> u64;
+
+    fn get_bit(&self, index: u64) -> bool;
 }

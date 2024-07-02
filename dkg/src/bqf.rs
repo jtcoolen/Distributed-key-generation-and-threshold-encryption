@@ -1,10 +1,12 @@
 //use rand_core::CryptoRng;
 
+use rug::{integer::IntegerExt64, Integer};
+
 use crate::z::{self, ExtendedGCDResult};
 
 trait BinaryQuadraticForm<Z>
 where
-    Z: crate::z::Z + std::fmt::Debug,
+    Z: crate::z::Z + std::fmt::Debug + Clone,
 {
     fn new(a: &Z, b: &Z, c: &Z) -> Self;
 
@@ -75,12 +77,11 @@ where
         let w = self.a().gcd(&other.a()).gcd(&g);
         let mut h = other.b().sub(&self.b());
         h.divide_by_2();
-        let j = w.clone();
+        let j = Clone::clone(&w);
         let s = self.a().divide_exact(&w);
         let t = other.a().divide_exact(&w);
         let u = g.divide_exact(&w);
         let st = s.mul(&t);
-        println!("ST={:?}", st);
         let (mu, nu) = t.mul_mod(&u, &st).solve_congruence(
             &h.mul_mod(&u, &st).add_mod(&s.mul_mod(&self.c(), &st), &st),
             &st,
@@ -119,7 +120,21 @@ where
     // See https://gite.lirmm.fr/crypto/bicycl/-/blob/master/src/bicycl/qfi.inl?ref_type=heads#L1162
     // https://github.com/jtcoolen/GLV_arkworks/blob/main/src/lib.rs#L84
     // https://github.com/jtcoolen/asymmetric_crypto/blob/master/elliptic_curves/ec_elgamal_codage_decodage.gp#L100
-    fn pow(self, exponent: Z) -> Self;
+    fn pow(&self, exponent: Z) -> Self
+    where
+        Self: Sized + Clone,
+    {
+        // naive double and add
+        let n = exponent.bit_size();
+        let mut res = self.clone();
+        for i in (0..=n).rev() {
+            res = res.double();
+            if exponent.get_bit(i) {
+                res = self.compose(&res).reduce();
+            }
+        }
+        res
+    }
 
     fn inverse(self) -> Self;
 }
@@ -135,7 +150,7 @@ where
     c: Z,
 }
 
-impl<Z: z::Z + std::fmt::Debug> BQF<Z> {
+impl<Z: z::Z + std::fmt::Debug + std::clone::Clone> BQF<Z> {
     fn rho(self) -> Self {
         BQF {
             a: self.c,
@@ -146,12 +161,12 @@ impl<Z: z::Z + std::fmt::Debug> BQF<Z> {
     }
 }
 
-impl<Z: z::Z + std::fmt::Debug> BinaryQuadraticForm<Z> for BQF<Z> {
+impl<Z: z::Z + std::fmt::Debug + std::clone::Clone> BinaryQuadraticForm<Z> for BQF<Z> {
     fn new(a: &Z, b: &Z, c: &Z) -> Self {
         BQF {
-            a: a.clone(),
-            b: b.clone(),
-            c: c.clone(),
+            a: Clone::clone(&a),
+            b: Clone::clone(&b),
+            c: Clone::clone(&c),
         }
     }
 
@@ -182,7 +197,7 @@ impl<Z: z::Z + std::fmt::Debug> BinaryQuadraticForm<Z> for BQF<Z> {
         } else {
             Z::from(0)
         };
-        let mut c = b.sub(&disc).clone();
+        let mut c = Clone::clone(&b.sub(&disc));
         c.divide_by_4();
         BQF {
             a: Z::from(1),
@@ -213,7 +228,7 @@ impl<Z: z::Z + std::fmt::Debug> BinaryQuadraticForm<Z> for BQF<Z> {
             remainder
         };
         quotient.divide_by_2();
-        let b = remainder.clone();
+        let b = Clone::clone(&remainder);
         let mut remainder = self.b.add(&remainder);
         remainder.divide_by_2();
         let c = self.c.sub(&quotient.mul(&remainder));
@@ -224,7 +239,7 @@ impl<Z: z::Z + std::fmt::Debug> BinaryQuadraticForm<Z> for BQF<Z> {
         }
     }
 
-    fn reduce(&self) -> Self {
+    /*fn reduce(&self) -> Self {
         let mut n = self.normalize();
         while n.a.less_than_abs(&n.c) {
             n = n.rho();
@@ -233,10 +248,19 @@ impl<Z: z::Z + std::fmt::Debug> BinaryQuadraticForm<Z> for BQF<Z> {
             n.b.oppose()
         }
         n
-    }
-
-    fn pow(self, exponent: Z) -> Self {
-        todo!()
+    }*/
+    fn reduce(&self) -> BQF<Z> {
+        let mut h: BQF<Z>;
+        let mut h_new = self.clone();
+        if !is_normal2(&self) {
+            h_new = self.normalize();
+        }
+        h = h_new;
+        while !is_reduced2(&h) {
+            let h_new = rho2(&h);
+            h = h_new;
+        }
+        h
     }
 
     // TODO (harder): implement compose, double, pow
@@ -245,6 +269,51 @@ impl<Z: z::Z + std::fmt::Debug> BinaryQuadraticForm<Z> for BQF<Z> {
 
     // TODO (less of a priority): compute class group number
 }
+
+fn normalize2<Z: z::Z + Clone>(x: BQF<Z>) -> BQF<Z> {
+    // assume delta<0 and a>0
+    let a_sub_b = x.a.sub(&x.b);
+    let s_f = a_sub_b.div_floor(Z::from(2).mul(&x.a));
+
+    BQF {
+        a: x.a.clone(),
+        b: x.b.add(&Z::from(2).mul(&s_f).mul(&x.a)),
+        c: x.a.mul(&s_f.sqr()).add(&x.b.mul(&s_f)).add(&x.c),
+    }
+}
+
+ fn rho2<Z: z::Z+ Clone>(x: &BQF<Z>) -> BQF<Z> {
+    let qf_new = BQF {
+        a: x.c.clone(),
+        b: x.b.clone().neg(),
+        c: x.a.clone(),
+    };
+
+    normalize2(qf_new)
+}
+
+fn is_normal2<Z: z::Z>(x: &BQF<Z>) -> bool {
+    x.b.less_than(&x.a) && !(x.b.less_than(&x.a.neg()))
+}
+
+fn is_reduced2<Z: z::Z>(x: &BQF<Z>) -> bool {
+    is_normal2(x) && x.a.less_than(&x.c) && !(x.a.eq(&x.c) && x.b.less_than(&Z::zero()))
+}
+
+ fn reduce2<Z: z::Z + Clone>(x: BQF<Z>) -> BQF<Z> {
+    let mut h: BQF<Z>;
+    let mut h_new = x.clone();
+    if !is_normal2(&x) {
+        h_new = normalize2(x);
+    }
+    h = h_new;
+    while !is_reduced2(&h) {
+        let h_new = rho2(&h);
+        h = h_new;
+    }
+    h
+}
+
 
 // TODO instantiate with BQF<Bignum4096> for a discriminant of 1827 bits
 // security level of 128 bits
@@ -271,49 +340,6 @@ mod tests {
 
     use super::*;
 
-    fn normalize2<Z: z::Z>(x: BQF<Z>) -> BQF<Z> {
-        // assume delta<0 and a>0
-        let a_sub_b = x.a.sub(&x.b);
-        let s_f = a_sub_b.div_floor(Z::from(2).mul(&x.a));
-
-        BQF {
-            a: x.a.clone(),
-            b: x.b.add(&Z::from(2).mul(&s_f).mul(&x.a)),
-            c: x.a.mul(&s_f.sqr()).add(&x.b.mul(&s_f)).add(&x.c),
-        }
-    }
-
-    pub fn rho2<Z: z::Z>(x: &BQF<Z>) -> BQF<Z> {
-        let qf_new = BQF {
-            a: x.c.clone(),
-            b: x.b.clone().neg(),
-            c: x.a.clone(),
-        };
-
-        normalize2(qf_new)
-    }
-
-    fn is_normal2<Z: z::Z>(x: &BQF<Z>) -> bool {
-        x.b.less_than(&x.a) && !(x.b.less_than(&x.a.neg()))
-    }
-
-    fn is_reduced2<Z: z::Z>(x: &BQF<Z>) -> bool {
-        is_normal2(x) && x.a.less_than(&x.c) && !(x.a.eq(&x.c) && x.b.less_than(&Z::zero()))
-    }
-
-    pub fn reduce2<Z: z::Z + Clone>(x: BQF<Z>) -> BQF<Z> {
-        let mut h: BQF<Z>;
-        let mut h_new = x.clone();
-        if !is_normal2(&x) {
-            h_new = normalize2(x);
-        }
-        h = h_new;
-        while !is_reduced2(&h) {
-            let h_new = rho2(&h);
-            h = h_new;
-        }
-        h
-    }
 
     pub fn convert(v: Vec<u8>) -> [u64; 128] {
         assert!(v.len() <= 512);
@@ -768,4 +794,99 @@ mod tests {
         println!("double BICYCL={:?}\ndouble={:?}", dupl_bicycl, dupl);
         assert!(dupl_bicycl.equals(&dupl));
     }
+
+    #[test]
+    fn test_pow() {
+        // TODO randomize test, use bicycl keygen function to generate valid binary quadratic form
+        let a = "1";
+
+        let s: bicycl::cpp_std::cpp_core::CppBox<String> =
+            unsafe { String::from_char_usize(a.as_ptr() as *const c_char, a.len()) };
+        let s: Ref<String> = unsafe { Ref::from_raw_ref(&s) };
+        let mut a = unsafe { b_i_c_y_c_l::Mpz::from_string(s) };
+
+        let b = "1";
+        let s: bicycl::cpp_std::cpp_core::CppBox<String> =
+            unsafe { String::from_char_usize(b.as_ptr() as *const c_char, b.len()) };
+        let s: Ref<String> = unsafe { Ref::from_raw_ref(&s) };
+        let mut b = unsafe { b_i_c_y_c_l::Mpz::from_string(s) };
+
+        let cc = unsafe { bicycl::cpp_vec_to_rust(&Mpz::mpz_to_b_i_g_bytes(&mut *b)) };
+        println!("sign={:?}", cc);
+
+        let c = "633825300114114700748351602708";
+        let s: bicycl::cpp_std::cpp_core::CppBox<String> =
+            unsafe { String::from_char_usize(c.as_ptr() as *const c_char, c.len()) };
+        let s: Ref<String> = unsafe { Ref::from_raw_ref(&s) };
+        let mut c = unsafe { b_i_c_y_c_l::Mpz::from_string(s) };
+
+        let a_: cpp_core::Ref<Mpz> = unsafe { cpp_core::Ref::from_raw_ref(&a) };
+        let b_: cpp_core::Ref<Mpz> = unsafe { cpp_core::Ref::from_raw_ref(&b) };
+        let c_: cpp_core::Ref<Mpz> = unsafe { cpp_core::Ref::from_raw_ref(&c) };
+        let mut qfi = unsafe { bicycl::b_i_c_y_c_l::QFI::new_4a(a_, b_, c_, false) };
+
+        let s = unsafe { Ref::from_raw_ref(&qfi) };
+
+        let mut disc = unsafe { b_i_c_y_c_l::QFI::discriminant(&s) };
+
+        let cc = unsafe { bicycl::cpp_vec_to_rust(&Mpz::mpz_to_b_i_g_bytes(&mut *disc)) };
+        println!("disc2={:?}", cc);
+
+        let aa = unsafe { bicycl::cpp_vec_to_rust(&Mpz::mpz_to_b_i_g_bytes(&mut *a)) };
+        println!("aa={:?}", aa);
+
+        println!("disc {:?}", mpz_to_bignum(&mut disc));
+
+        let qfi2 = super::BQF::new(
+            &mpz_to_bignum1(&mut a),
+            &mpz_to_bignum1(&mut b),
+            &mpz_to_bignum1(&mut c),
+        );
+        unsafe { qfi.normalize_0a() };
+        unsafe { qfi.normalize_0a() };
+
+        let mut res = unsafe { QFI::new_0a() };
+        //let mutref_res: cpp_core::MutRef<QFI> = unsafe { cpp_core::MutRef::from_raw_ref(&mut res) };
+
+        let cl = unsafe { ClassGroup::new(&disc) };
+
+        unsafe { cl.nupow_3a(&mut res, &qfi, &disc) };
+
+        unsafe { res.normalize_0a() };
+        let d = unsafe { QFI::discriminant(&qfi) };
+        assert!(mpz_to_bignum1(&d) == mpz_to_bignum1(&mut disc));
+
+        //let d = mpz_to_bignum(&mut d);
+
+        let mut aaa = unsafe { Mpz::new() };
+        let _ = unsafe { Mpz::copy_from_mpz(&mut aaa, res.a()) };
+
+        let mut bbb = unsafe { Mpz::new() };
+        let _ = unsafe { Mpz::copy_from_mpz(&mut bbb, res.b()) };
+
+        let mut ccc = unsafe { Mpz::new() };
+        let _ = unsafe { Mpz::copy_from_mpz(&mut ccc, res.c()) };
+
+        let qfi3 = super::BQF::new(
+            &mpz_to_bignum1(&mut aaa),
+            &mpz_to_bignum1(&mut bbb),
+            &mpz_to_bignum1(&mut ccc),
+        );
+        println!("disc={:?}, disc={:?}", d, qfi3.discriminant());
+
+        //let comp = qfi2.compose(&qfi2);
+        //let dd = comp.discriminant();
+
+        //assert!(mpz_to_bignum1(&d) == dd);
+        //println!("D={}", dd);
+        println!("qfi2={:?}", qfi2);
+
+        let dupl_bicycl = qfi3;
+
+        let dupl = reduce2(reduce2(qfi2.pow(mpz_to_bignum1(&d))));
+
+        println!("double BICYCL={:?}\ndouble={:?}", dupl_bicycl, dupl);
+        assert!(dupl_bicycl.equals(&dupl));
+    }
 }
+

@@ -1,5 +1,6 @@
 use crate::z::EuclideanDivResult;
 use core::cmp::Ordering;
+use rug::integer::IntegerExt64;
 use rug::ops::DivRounding;
 use rug::ops::NegAssign;
 use rug::Complete;
@@ -16,10 +17,6 @@ impl crate::z::Z for rug::Integer {
 
     fn add_mod(&self, other: &Self, modulo: &Self) -> Self {
         (self + other).complete().modulo(modulo)
-    }
-
-    fn clone(&self) -> Self {
-        Clone::clone(&self)
     }
 
     fn divide_by_2(&mut self) {
@@ -144,5 +141,13 @@ impl crate::z::Z for rug::Integer {
 
     fn div_floor(&self, other: Self) -> Self {
         DivRounding::div_floor(self, other)
+    }
+
+    fn bit_size(&self) -> u64 {
+        Integer::significant_bits_64(&self)
+    }
+
+    fn get_bit(&self, index: u64) -> bool {
+        Integer::get_bit_64(&self, index)
     }
 }
