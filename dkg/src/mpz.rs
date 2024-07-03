@@ -150,4 +150,12 @@ impl crate::z::Z for rug::Integer {
     fn get_bit(&self, index: u64) -> bool {
         Integer::get_bit_64(&self, index)
     }
+
+    fn from_bytes(b: Vec<u8>) -> Self {
+        Integer::from_digits(&b, rug::integer::Order::Lsf)
+    }
+
+    fn to_bytes(&self) -> Vec<u8> {
+        Integer::to_digits::<u8>(self, rug::integer::Order::Lsf)
+    }
 }

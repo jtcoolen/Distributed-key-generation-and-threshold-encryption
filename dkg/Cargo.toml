@@ -19,6 +19,8 @@ bicycl = {git="https://github.com/hsaleemsupra/cgdkg_artifact.git"}
 bytemuck = "1.16.0"
 gmp-mpfr-sys = "1.6.4"
 rug = "1.24.1"
+blake3 = "1.5.1"
+rand = "0.9.0-alpha.1"
 
 [dev-dependencies]
 proptest-derive = "0.2.0"

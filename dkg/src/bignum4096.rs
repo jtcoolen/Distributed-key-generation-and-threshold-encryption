@@ -410,4 +410,12 @@ impl Z for Bignum4096 {
     fn get_bit(&self, index: u64) -> bool {
         todo!()
     }
+
+    fn from_bytes(b: Vec<u8>) -> Self {
+        todo!()
+    }
+
+    fn to_bytes(&self) -> Vec<u8> {
+        todo!()
+    }
 }

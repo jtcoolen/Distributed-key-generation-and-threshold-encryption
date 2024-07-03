@@ -1,8 +1,6 @@
 //use rand_core::CryptoRng;
 
-use rug::{integer::IntegerExt64, Integer};
-
-use crate::z::{self, ExtendedGCDResult};
+use crate::z::{self};
 
 pub trait BinaryQuadraticForm<Z>
 where
@@ -120,7 +118,7 @@ where
     // See https://gite.lirmm.fr/crypto/bicycl/-/blob/master/src/bicycl/qfi.inl?ref_type=heads#L1162
     // https://github.com/jtcoolen/GLV_arkworks/blob/main/src/lib.rs#L84
     // https://github.com/jtcoolen/asymmetric_crypto/blob/master/elliptic_curves/ec_elgamal_codage_decodage.gp#L100
-    fn pow(&self, exponent: Z) -> Self
+    fn pow(&self, exponent: &Z) -> Self
     where
         Self: Sized + Clone,
     {
@@ -137,11 +135,13 @@ where
     }
 
     fn inverse(self) -> Self;
+
+    fn to_bytes(&self) -> Vec<u8>;
 }
 
 #[derive(Debug, Clone)]
 #[warn(dead_code)]
-struct BQF<Z>
+pub struct BQF<Z>
 where
     Z: crate::z::Z,
 {
@@ -261,6 +261,15 @@ impl<Z: z::Z + std::fmt::Debug + std::clone::Clone> BinaryQuadraticForm<Z> for B
             h = h_new;
         }
         h
+    }
+
+    fn to_bytes(&self) -> Vec<u8> {
+        // Convert each field to bytes
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&self.a.to_bytes());
+        bytes.extend_from_slice(&self.b.to_bytes());
+        bytes.extend_from_slice(&self.c.to_bytes());
+        bytes
     }
 
     // TODO (harder): implement compose, double, pow
@@ -881,7 +890,7 @@ mod tests {
 
         let dupl_bicycl = qfi3;
 
-        let dupl = reduce2(reduce2(qfi2.pow(mpz_to_bignum1(&d))));
+        let dupl = reduce2(reduce2(qfi2.pow(&mpz_to_bignum1(&d))));
 
         println!("double BICYCL={:?}\ndouble={:?}", dupl_bicycl, dupl);
         assert!(dupl_bicycl.equals(&dupl));

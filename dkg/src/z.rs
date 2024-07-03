@@ -17,7 +17,20 @@ pub trait Z {
 
     fn from(n: u64) -> Self;
 
+    fn from_bytes(b: Vec<u8>) -> Self;
+
+    fn to_bytes(&self) -> Vec<u8>;
+
     fn random<R: CryptoRng>(rng: &mut R) -> Self;
+
+    fn sample_range<R: CryptoRng>(rng: &mut R, lower: &Self, upper: &Self) -> Self
+    where
+        Self: Sized,
+    {
+        let rd = Self::random(rng);
+        rd.take_mod(&(upper.sub(lower).add(&Self::from(1))))
+            .add(lower)
+    }
 
     fn eq_abs(&self, rhs: &Self) -> bool;
 
