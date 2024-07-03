@@ -4,7 +4,7 @@ use rug::{integer::IntegerExt64, Integer};
 
 use crate::z::{self, ExtendedGCDResult};
 
-trait BinaryQuadraticForm<Z>
+pub trait BinaryQuadraticForm<Z>
 where
     Z: crate::z::Z + std::fmt::Debug + Clone,
 {
@@ -282,7 +282,7 @@ fn normalize2<Z: z::Z + Clone>(x: BQF<Z>) -> BQF<Z> {
     }
 }
 
- fn rho2<Z: z::Z+ Clone>(x: &BQF<Z>) -> BQF<Z> {
+fn rho2<Z: z::Z + Clone>(x: &BQF<Z>) -> BQF<Z> {
     let qf_new = BQF {
         a: x.c.clone(),
         b: x.b.clone().neg(),
@@ -300,7 +300,7 @@ fn is_reduced2<Z: z::Z>(x: &BQF<Z>) -> bool {
     is_normal2(x) && x.a.less_than(&x.c) && !(x.a.eq(&x.c) && x.b.less_than(&Z::zero()))
 }
 
- fn reduce2<Z: z::Z + Clone>(x: BQF<Z>) -> BQF<Z> {
+fn reduce2<Z: z::Z + Clone>(x: BQF<Z>) -> BQF<Z> {
     let mut h: BQF<Z>;
     let mut h_new = x.clone();
     if !is_normal2(&x) {
@@ -313,7 +313,6 @@ fn is_reduced2<Z: z::Z>(x: &BQF<Z>) -> bool {
     }
     h
 }
-
 
 // TODO instantiate with BQF<Bignum4096> for a discriminant of 1827 bits
 // security level of 128 bits
@@ -339,7 +338,6 @@ mod tests {
     use crate::bignum4096::Bignum4096;
 
     use super::*;
-
 
     pub fn convert(v: Vec<u8>) -> [u64; 128] {
         assert!(v.len() <= 512);
@@ -889,4 +887,3 @@ mod tests {
         assert!(dupl_bicycl.equals(&dupl));
     }
 }
-
