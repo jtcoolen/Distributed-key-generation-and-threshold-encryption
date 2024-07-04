@@ -1,4 +1,6 @@
 use rand_core::CryptoRng;
+use rug::rand::MutRandState;
+use rug::Integer;
 
 pub struct EuclideanDivResult<Z> {
     pub quotient: Z,
@@ -22,6 +24,8 @@ pub trait Z {
     fn to_bytes(&self) -> Vec<u8>;
 
     fn random<R: CryptoRng>(rng: &mut R) -> Self;
+
+    fn sample_bits<R: rand_core::CryptoRng + MutRandState>(nbits: u32, rng: &mut R) -> Self;
 
     fn sample_range<R: CryptoRng>(rng: &mut R, lower: &Self, upper: &Self) -> Self
     where
@@ -120,4 +124,9 @@ pub trait Z {
     fn bit_size(&self) -> u64;
 
     fn get_bit(&self, index: u64) -> bool;
+
+    fn sqrt(&self) -> Self;
+
+    fn next_prime(&self) -> Self;
+    fn kronecker(&self, other: &Self) -> i32;
 }

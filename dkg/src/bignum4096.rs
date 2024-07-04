@@ -2,11 +2,15 @@ use rand_core::CryptoRng;
 use rug::ops::DivRoundingAssign;
 // TODO: Rug is using floats! Replace by "raw" GMP bindings
 use rug::ops::NegAssign;
+use rug::rand::MutRandState;
 use rug::Complete;
 use rug::Integer;
 
 use crate::z::EuclideanDivResult;
 use crate::z::Z;
+
+// TODO: note that with a security level of 112 we can support up to 3 multiplications
+// of 1348-bit integers fitting inside 4096 bit ints
 
 /// Signed integer with range (-2^4096, 2^4096)
 /// Does not check for overflows!
@@ -416,6 +420,22 @@ impl Z for Bignum4096 {
     }
 
     fn to_bytes(&self) -> Vec<u8> {
+        todo!()
+    }
+
+    fn sqrt(&self) -> Self {
+        todo!()
+    }
+
+    fn next_prime(&self) -> Self {
+        todo!()
+    }
+
+    fn sample_bits<R: CryptoRng + MutRandState>(nbits: u32, rng: &mut R) -> Self {
+        todo!()
+    }
+
+    fn kronecker(&self, other: &Self) -> i32 {
         todo!()
     }
 }

@@ -137,6 +137,17 @@ where
     fn inverse(self) -> Self;
 
     fn to_bytes(&self) -> Vec<u8>;
+
+    fn prime_form(discriminant: &Z, prime: &Z) -> Self
+    where
+        Self: Sized,
+    {
+        let a = prime.clone();
+        let b = discriminant.sqrt().divide_exact(&prime);
+        let mut c = b.sqr().sub(&discriminant).divide_exact(&a);
+        c.divide_by_4();
+        Self::new(&a, &b, &c).reduce()
+    }
 }
 
 #[derive(Debug, Clone)]
