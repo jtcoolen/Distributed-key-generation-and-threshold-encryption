@@ -1,5 +1,6 @@
 use rand_core::CryptoRng;
 use rug::ops::DivRoundingAssign;
+use std::cmp::Ordering;
 // TODO: Rug is using floats! Replace by "raw" GMP bindings
 use rug::ops::NegAssign;
 use rug::rand::MutRandState;
@@ -431,11 +432,45 @@ impl Z for Bignum4096 {
         todo!()
     }
 
-    fn sample_bits<R: CryptoRng + MutRandState>(nbits: u32, rng: &mut R) -> Self {
+    fn sample_bits<R: CryptoRng>(nbits: u32, rng: &mut R) -> Self {
         todo!()
     }
 
     fn kronecker(&self, other: &Self) -> i32 {
+        todo!()
+    }
+
+    fn invert_mod(&self, modulo: &Self) -> Option<Self>
+    where
+        Self: Sized,
+    {
+        todo!()
+    }
+
+    fn compare(&self, other: &Self) -> Ordering {
+        todo!()
+    }
+
+    fn remove(&self, factor: &Self) -> (Self, u32)
+    where
+        Self: Sized,
+    {
+        todo!()
+    }
+
+    fn sqrt_mod_prime(&self, prime: &Self) -> Option<Self> {
+        todo!()
+    }
+
+    fn abs(&self) -> Self {
+        todo!()
+    }
+
+    fn pow_mod(&self, exponent: &Self, modulo: &Self) -> Self {
+        todo!()
+    }
+
+    fn from_i64(i: i64) -> Self {
         todo!()
     }
 }

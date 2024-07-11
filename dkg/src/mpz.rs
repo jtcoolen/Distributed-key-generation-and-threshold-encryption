@@ -1,11 +1,14 @@
 use crate::z::EuclideanDivResult;
+use bytemuck::Contiguous;
 use core::cmp::Ordering;
 use rug::integer::IntegerExt64;
-use rug::ops::DivRounding;
 use rug::ops::NegAssign;
+use rug::ops::{DivRounding, Pow};
 use rug::rand::MutRandState;
 use rug::Complete;
 use rug::Integer;
+use std::cmp::Ordering::Less;
+use std::ops::AddAssign;
 
 impl crate::z::Z for rug::Integer {
     fn zero() -> Self {
@@ -85,7 +88,7 @@ impl crate::z::Z for rug::Integer {
     where
         Self: Sized,
     {
-        let (q, r) = self.div_rem_floor_ref(other).complete();
+        let (q, r) = self.div_rem_ceil_ref(other).complete();
         EuclideanDivResult {
             quotient: q,
             remainder: r,
@@ -168,11 +171,125 @@ impl crate::z::Z for rug::Integer {
         Integer::next_prime_ref(&self).complete()
     }
 
-    fn sample_bits<R: rand_core::CryptoRng + MutRandState>(nbits: u32, rng: &mut R) -> Self {
-        <Self as From<_>>::from(Integer::random_bits(nbits, rng))
+    fn sample_bits<R: rand_core::CryptoRng>(nbits: u32, rng: &mut R) -> Self {
+        // Calculate the number of bytes needed
+        let nbytes = nbits / 8 + 1;
+
+        // Create a buffer to hold the random bytes
+        let mut buffer = vec![0u8; nbytes as usize];
+
+        // Fill the buffer with random bytes
+        rng.fill_bytes(&mut buffer);
+
+        // Create a rug::Integer from the random bytes
+        let mut integer = Integer::from_digits(&buffer, rug::integer::Order::Lsf);
+
+        //buffer.reverse();
+        // Ensure the integer has exactly nbits by masking the most significant bits
+        if nbits % 8 != 0 {
+            let mask = (1u8 << (nbits % 8)) - 1;
+            let last_byte_index = buffer.len() - 1;
+            buffer[last_byte_index] &= mask;
+            integer = Integer::from_digits(&buffer, rug::integer::Order::Lsf);
+        }
+
+        println!("nbits: {}, buffer={:?}", nbits, buffer);
+
+        integer
     }
 
     fn kronecker(&self, other: &Self) -> i32 {
         Integer::kronecker(self, other)
+    }
+
+    fn invert_mod(&self, modulo: &Self) -> Option<Self>
+    where
+        Self: Sized,
+    {
+        self.invert_ref(modulo).and_then(|b| Some(b.into()))
+    }
+
+    fn compare(&self, other: &Self) -> Ordering {
+        Integer::cmp(self, other)
+    }
+
+    fn remove(&self, factor: &Self) -> (Self, u32)
+    where
+        Self: Sized,
+    {
+        Integer::remove_factor_ref(self, factor).complete()
+    }
+
+    fn sqrt_mod_prime(&self, prime: &Self) -> Option<Self> {
+        // Shanks-Tonelli
+        if self == &Integer::ZERO {
+            return Some(Integer::ZERO);
+        }
+
+        // Check if a is a quadratic residue modulo p
+        if self.legendre(prime) != 1 {
+            return None;
+        }
+
+        // Find n such that n is a quadratic non-residue modulo p
+        let mut n = <Integer as From<u32>>::from(2u32);
+        while n.compare(prime) == Less {
+            if n.legendre(prime) == -1 {
+                break;
+            }
+            n += 1;
+        }
+
+        // p - 1 = 2^s * q
+        let mut q = prime.sub(Integer::ONE);
+        let mut s: i32 = 0;
+        while q.is_even() {
+            q >>= 1;
+            s += 1;
+        }
+
+        let inv_prime = self.invert_mod(prime).unwrap();
+
+        let r =
+            <Integer as From<_>>::from(self.pow_mod_ref(&((q.clone() + 1) >> 1), prime).unwrap());
+        let y = r
+            .sqr()
+            .take_mod(prime)
+            .mul_mod(&inv_prime, prime)
+            .take_mod(prime);
+        let mut b = <Integer as From<_>>::from(n.pow_mod_ref(&q, prime).unwrap());
+        let mut j = Integer::ZERO.clone();
+
+        // Calculate the power j of b such that b^(2*j)*r^2/a = 1 mod p.
+        for k in 0..=(s - 2) {
+            let exp = <Integer as From<_>>::from(Integer::ONE << ((s - 2 - k) as u32));
+            let b_pow =
+                <Integer as From<_>>::from(b.pow_mod_ref(&(j.clone() << 1), prime).unwrap());
+            let b_pow = <Integer as From<_>>::from(
+                b_pow.mul_mod(&y, prime).pow_mod_ref(&exp, prime).unwrap(),
+            );
+            if b_pow != 1 {
+                j.add_assign(<Integer as From<_>>::from(Integer::ONE << k));
+            }
+        }
+
+        // b^(2*j)*r^2/a = 1 mod p => (b^j*r)^2 = a mod p.
+        Some(
+            <Integer as From<_>>::from(b.pow_mod_ref(&j, prime).unwrap())
+                .mul(&r)
+                .take_mod(prime),
+        )
+    }
+
+    fn abs(&self) -> Self {
+        Integer::abs_ref(self).complete()
+    }
+
+    fn pow_mod(&self, exponent: &Self, modulo: &Self) -> Self {
+        Integer::pow_mod_ref(self, exponent, modulo).unwrap().into()
+    }
+
+    fn from_i64(i: i64) -> Self {
+        <Integer as From<_>>::from(i)
     }
 }

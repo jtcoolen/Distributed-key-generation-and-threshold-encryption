@@ -1,12 +1,18 @@
 //use rand_core::CryptoRng;
 
+use crate::cl_hsmq::KernelError;
 use crate::z::{self};
+use rand_core::CryptoRng;
+use std::cmp::Ordering::Greater;
+use std::fmt::Debug;
 
 pub trait BinaryQuadraticForm<Z>
 where
     Z: crate::z::Z + std::fmt::Debug + Clone,
 {
     fn new(a: &Z, b: &Z, c: &Z) -> Self;
+
+    fn new_with_discriminant(a: &Z, b: &Z, discriminant: &Z) -> Self;
 
     fn a(&self) -> Z;
     fn b(&self) -> Z;
@@ -24,6 +30,7 @@ where
 
     fn reduce(&self) -> Self;
 
+    // TODO: this is the most expensive operation
     /// https://www.ams.org/journals/mcom/2003-72-244/S0025-5718-03-01518-7/S0025-5718-03-01518-7.pdf
     /// Quadratic form (u,v,w)=uX^2+vXY+wY^2
     /// How to compose two forms (u1,v1,w1) and (u2,v2,w2) of same discriminant D < 0?
@@ -97,7 +104,7 @@ where
             .divide_exact(&st);
         let b = j.mul(&u).sub(&k.mul(&t)).sub(&l.mul(&s));
         let c = k.mul(&l).sub(&j.mul(&m));
-        Self::new(&st, &b, &c).reduce().reduce().reduce()
+        Self::new(&st, &b, &c).reduce()
     }
 
     // For squaring https://www.michaelstraka.com/posts/classgroups/
@@ -111,9 +118,11 @@ where
         let b = self.b().sub(&Z::from(2).mul(&self.a()).mul(&mu));
         let rhs = self.b().mul(&mu).sub(&self.c()).divide_exact(&self.a());
         let c = mu.sqr().sub(&rhs);
-        Self::new(&a, &b, &c)
+        Self::new(&a, &b, &c).reduce()
     }
 
+    // TODO: this is the most expensive function, try windowing methods
+    // TODO reduce is called more frequently than compose
     // We can use double and add with Shamir's window trick (q-ary decomposition)
     // See https://gite.lirmm.fr/crypto/bicycl/-/blob/master/src/bicycl/qfi.inl?ref_type=heads#L1162
     // https://github.com/jtcoolen/GLV_arkworks/blob/main/src/lib.rs#L84
@@ -124,11 +133,11 @@ where
     {
         // naive double and add
         let n = exponent.bit_size();
-        let mut res = self.clone();
+        let mut res = self.reduce();
         for i in (0..=n).rev() {
             res = res.double();
             if exponent.get_bit(i) {
-                res = self.compose(&res).reduce();
+                res = self.compose(&res);
             }
         }
         res
@@ -143,11 +152,20 @@ where
         Self: Sized,
     {
         let a = prime.clone();
-        let b = discriminant.sqrt().divide_exact(&prime);
-        let mut c = b.sqr().sub(&discriminant).divide_exact(&a);
-        c.divide_by_4();
-        Self::new(&a, &b, &c).reduce()
+        let mut b = discriminant.sqrt_mod_prime(&prime).unwrap();
+        if b.is_odd() != discriminant.is_odd() {
+            /* not same parity */
+            b = prime.sub(&b);
+        }
+        Self::new_with_discriminant(&a, &b, discriminant).reduce()
     }
+
+    fn class_number_bound<R: CryptoRng>(_rng: &mut R, discriminant: &Z) -> Z;
+
+    fn prime_to(&self, l: &Z) -> Self;
+    fn to_maximal_order(&self, l: &Z, DeltaK: &Z) -> BQF<Z>;
+
+    fn kernel_representative(&self, l: &Z, DeltaK: &Z) -> Result<Z, KernelError>;
 }
 
 #[derive(Debug, Clone)]
@@ -162,13 +180,8 @@ where
 }
 
 impl<Z: z::Z + std::fmt::Debug + std::clone::Clone> BQF<Z> {
-    fn rho(self) -> Self {
-        BQF {
-            a: self.c,
-            b: self.b.neg(),
-            c: self.a,
-        }
-        .normalize()
+    pub(crate) fn rho(&self) -> Self {
+        rho2(self)
     }
 }
 
@@ -178,6 +191,18 @@ impl<Z: z::Z + std::fmt::Debug + std::clone::Clone> BinaryQuadraticForm<Z> for B
             a: Clone::clone(&a),
             b: Clone::clone(&b),
             c: Clone::clone(&c),
+        }
+    }
+
+    fn new_with_discriminant(a: &Z, b: &Z, discriminant: &Z) -> Self {
+        println!("in new with disc");
+        let mut c = b.sqr().sub(discriminant).divide_exact(a);
+        c.divide_by_4();
+        println!("aft div");
+        BQF {
+            a: Clone::clone(&a),
+            b: Clone::clone(&b),
+            c,
         }
     }
 
@@ -228,18 +253,24 @@ impl<Z: z::Z + std::fmt::Debug + std::clone::Clone> BinaryQuadraticForm<Z> for B
     // TODO check/test correctness and benchmark
     // TODO inplace operations?
     // TODO check for overflow
+    // seems to be a bottleneck
     fn normalize(&self) -> Self {
-        let z::EuclideanDivResult {
+        // TODO: make what's below work
+        /*let z::EuclideanDivResult {
             mut quotient,
             remainder,
         } = self.b.euclidean_div_ceil(&self.a);
-        let remainder = if quotient.is_odd() {
+        let mut remainder = if quotient.is_odd() {
             remainder.add(&self.a)
         } else {
             remainder
         };
         quotient.divide_by_2();
-        let b = Clone::clone(&remainder);
+
+        //assert!(self.b.eq(& Z::from(2).mul(&self.a).mul(&quotient).add(&remainder)));
+
+        let b = remainder.clone();
+
         let mut remainder = self.b.add(&remainder);
         remainder.divide_by_2();
         let c = self.c.sub(&quotient.mul(&remainder));
@@ -247,6 +278,15 @@ impl<Z: z::Z + std::fmt::Debug + std::clone::Clone> BinaryQuadraticForm<Z> for B
             a: self.a.clone(),
             b,
             c,
+        }*/
+        let x = self;
+        let a_sub_b = x.a.sub(&x.b);
+        let s_f = a_sub_b.div_floor(Z::from(2).mul(&x.a));
+
+        BQF {
+            a: x.a.clone(),
+            b: x.b.add(&Z::from(2).mul(&s_f).mul(&x.a)),
+            c: x.a.mul(&s_f.sqr()).add(&x.b.mul(&s_f)).add(&x.c),
         }
     }
 
@@ -268,8 +308,7 @@ impl<Z: z::Z + std::fmt::Debug + std::clone::Clone> BinaryQuadraticForm<Z> for B
         }
         h = h_new;
         while !is_reduced2(&h) {
-            let h_new = rho2(&h);
-            h = h_new;
+            h = rho2(&h)
         }
         h
     }
@@ -283,11 +322,87 @@ impl<Z: z::Z + std::fmt::Debug + std::clone::Clone> BinaryQuadraticForm<Z> for B
         bytes
     }
 
+    fn class_number_bound<R: CryptoRng>(_rng: &mut R, discriminant: &Z) -> Z {
+        // TODO write the correct calculation
+        let target = discriminant.abs().sqrt().divide_exact(&Z::from(8));
+        let delta = Z::from(100);
+        Z::sample_range(_rng, &target.sub(&delta), &target.add(&delta))
+    }
+
+    fn prime_to(&self, l: &Z) -> Self {
+        let mut g = self.a().gcd(l);
+        let mut a = self.a();
+        let mut b = self.b();
+        let mut c = self.c();
+        if g.compare(&Z::from(1u64)) == Greater {
+            g = self.c().gcd(l);
+            if g.compare(&Z::from(1u64)) == Greater {
+                // Transform f into (a + b + c, -b - 2a, a)
+                c = c.add(&self.a());
+                c = c.add(&self.b());
+                b = b.add(&self.a());
+                b = b.add(&self.a());
+                b = b.neg();
+                std::mem::swap(&mut a, &mut c);
+            } else {
+                // c is coprime to l: transform f into (c, -b, a)
+                std::mem::swap(&mut a, &mut c);
+                b = b.neg();
+            }
+        }
+        // else do nothing if a is already coprime to l
+        BQF::new(&a, &b, &c)
+    }
+
+    fn to_maximal_order(&self, l: &Z, DeltaK: &Z) -> BQF<Z> {
+        let new_self = self.prime_to(l);
+
+        let (_, g0, g1) = l.extended_gcd(&new_self.a());
+
+        let mut b = new_self.b().mul(&g0);
+        b = b.add(&new_self.a().mul(&g1));
+
+        BQF::new_with_discriminant(&new_self.a(), &b, DeltaK)
+    }
+
+    fn kernel_representative(&self, l: &Z, DeltaK: &Z) -> Result<Z, KernelError> {
+        let mut tmp0 = Z::default();
+        let mut g0 = Z::from(1u64);
+        let mut g1 = Z::from(0u64);
+
+        let mut ft = self.clone();
+        ft.to_maximal_order(l, DeltaK);
+
+        let mut ft = ft.normalize();
+        while ft.a().abs().compare(&ft.c().abs()) == Greater {
+            tmp0 = g1.mul(&DeltaK);
+            g1 = g1.mul(&ft.b());
+            g1 = g1.add(&g0);
+            g0 = g0.mul(&ft.b());
+            g0 = g0.add(&tmp0.clone());
+
+            ft = ft.rho();
+        }
+
+        if !ft.a().eq(&Z::from(1u64)) || !ft.b().eq(&Z::from(1u64)) {
+            return Err(KernelError::NotInKernel);
+        }
+
+        let tmp1 = g0.gcd(&g1);
+        g0 = g0.divide_exact(&tmp1);
+        g1 = g1.divide_exact(&tmp1);
+
+        tmp0 = g0.invert_mod(l).unwrap();
+        g1 = g1.neg();
+        tmp0 = tmp0.mul_mod(&g1, l);
+
+        Ok(tmp0)
+    }
     // TODO (harder): implement compose, double, pow
     // reverse-engineer their implementation
     //https://gite.lirmm.fr/crypto/bicycl/-/blob/master/src/bicycl/qfi.inl?ref_type=heads#L621
 
-    // TODO (less of a priority): compute class group number
+    // TODO special algo for exponentiations in F: https://eprint.iacr.org/2022/1466.pdf
 }
 
 fn normalize2<Z: z::Z + Clone>(x: BQF<Z>) -> BQF<Z> {
@@ -308,7 +423,6 @@ fn rho2<Z: z::Z + Clone>(x: &BQF<Z>) -> BQF<Z> {
         b: x.b.clone().neg(),
         c: x.a.clone(),
     };
-
     normalize2(qf_new)
 }
 
@@ -317,7 +431,8 @@ fn is_normal2<Z: z::Z>(x: &BQF<Z>) -> bool {
 }
 
 fn is_reduced2<Z: z::Z>(x: &BQF<Z>) -> bool {
-    is_normal2(x) && x.a.less_than(&x.c) && !(x.a.eq(&x.c) && x.b.less_than(&Z::zero()))
+    //is_normal2(x) &&
+        x.a.less_than(&x.c) && !(x.a.eq(&x.c) && x.b.less_than(&Z::zero()))
 }
 
 fn reduce2<Z: z::Z + Clone>(x: BQF<Z>) -> BQF<Z> {
@@ -328,8 +443,7 @@ fn reduce2<Z: z::Z + Clone>(x: BQF<Z>) -> BQF<Z> {
     }
     h = h_new;
     while !is_reduced2(&h) {
-        let h_new = rho2(&h);
-        h = h_new;
+        h = rho2(&h)
     }
     h
 }

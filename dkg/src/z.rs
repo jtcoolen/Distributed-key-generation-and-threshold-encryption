@@ -1,6 +1,7 @@
 use rand_core::CryptoRng;
 use rug::rand::MutRandState;
 use rug::Integer;
+use std::cmp::Ordering;
 
 pub struct EuclideanDivResult<Z> {
     pub quotient: Z,
@@ -19,13 +20,15 @@ pub trait Z {
 
     fn from(n: u64) -> Self;
 
+    fn from_i64(i: i64) -> Self;
+
     fn from_bytes(b: Vec<u8>) -> Self;
 
     fn to_bytes(&self) -> Vec<u8>;
 
     fn random<R: CryptoRng>(rng: &mut R) -> Self;
 
-    fn sample_bits<R: rand_core::CryptoRng + MutRandState>(nbits: u32, rng: &mut R) -> Self;
+    fn sample_bits<R: rand_core::CryptoRng>(nbits: u32, rng: &mut R) -> Self;
 
     fn sample_range<R: CryptoRng>(rng: &mut R, lower: &Self, upper: &Self) -> Self
     where
@@ -128,5 +131,22 @@ pub trait Z {
     fn sqrt(&self) -> Self;
 
     fn next_prime(&self) -> Self;
+
     fn kronecker(&self, other: &Self) -> i32;
+
+    fn invert_mod(&self, modulo: &Self) -> Option<Self>
+    where
+        Self: Sized;
+    fn compare(&self, other: &Self) -> Ordering;
+    fn remove(&self, factor: &Self) -> (Self, u32)
+    where
+        Self: Sized;
+
+    fn sqrt_mod_prime(&self, prime: &Self) -> Option<Self>
+    where
+        Self: Sized;
+
+    fn abs(&self) -> Self;
+
+    fn pow_mod(&self, exponent: &Self, modulo: &Self) -> Self;
 }
