@@ -1,10 +1,13 @@
 //use rand_core::CryptoRng;
 
-use crate::cl_hsmq::KernelError;
-use crate::z::{self};
-use rand_core::CryptoRng;
 use std::cmp::Ordering::Greater;
 use std::fmt::Debug;
+
+use rand_core::CryptoRng;
+use serde::Serialize;
+
+use crate::cl_hsmq::KernelError;
+use crate::z::{self};
 
 pub trait BinaryQuadraticForm<Z>
 where
@@ -160,7 +163,7 @@ where
         Self::new_with_discriminant(&a, &b, discriminant).reduce()
     }
 
-    fn class_number_bound<R: CryptoRng>(_rng: &mut R, discriminant: &Z) -> Z;
+    fn class_number_bound<R: CryptoRng + rand_core::RngCore>(_rng: &mut R, discriminant: &Z) -> Z;
 
     fn prime_to(&self, l: &Z) -> Self;
     fn to_maximal_order(&self, l: &Z, DeltaK: &Z) -> BQF<Z>;
@@ -168,7 +171,7 @@ where
     fn kernel_representative(&self, l: &Z, DeltaK: &Z) -> Result<Z, KernelError>;
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 #[warn(dead_code)]
 pub struct BQF<Z>
 where
@@ -322,7 +325,7 @@ impl<Z: z::Z + std::fmt::Debug + std::clone::Clone> BinaryQuadraticForm<Z> for B
         bytes
     }
 
-    fn class_number_bound<R: CryptoRng>(_rng: &mut R, discriminant: &Z) -> Z {
+    fn class_number_bound<R: CryptoRng + rand_core::RngCore>(_rng: &mut R, discriminant: &Z) -> Z {
         // TODO write the correct calculation
         let target = discriminant.abs().sqrt().divide_exact(&Z::from(8));
         let delta = Z::from(100);
@@ -432,7 +435,7 @@ fn is_normal2<Z: z::Z>(x: &BQF<Z>) -> bool {
 
 fn is_reduced2<Z: z::Z>(x: &BQF<Z>) -> bool {
     //is_normal2(x) &&
-        x.a.less_than(&x.c) && !(x.a.eq(&x.c) && x.b.less_than(&Z::zero()))
+    x.a.less_than(&x.c) && !(x.a.eq(&x.c) && x.b.less_than(&Z::zero()))
 }
 
 fn reduce2<Z: z::Z + Clone>(x: BQF<Z>) -> BQF<Z> {
@@ -455,19 +458,16 @@ fn reduce2<Z: z::Z + Clone>(x: BQF<Z>) -> BQF<Z> {
 
 #[cfg(test)]
 mod tests {
-
-    use bicycl::cpp_std::VectorOfUchar;
-    use proptest::prelude::*;
-    use proptest_derive::Arbitrary;
+    use std::os::raw::c_char;
 
     use bicycl::b_i_c_y_c_l::{ClassGroup, Mpz, QFI};
-    use bicycl::cpp_core::{self, CppBox, MutRef, Ref};
+    use bicycl::cpp_core::{self, CppBox, Ref};
+    use bicycl::cpp_std::VectorOfUchar;
     use bicycl::{b_i_c_y_c_l, cpp_std::String};
     use rug::ops::NegAssign;
     use rug::Integer;
-    use z::Z;
 
-    use std::os::raw::c_char;
+    use z::Z;
 
     use crate::bignum4096::Bignum4096;
 

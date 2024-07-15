@@ -1,5 +1,6 @@
+use rand_core::OsRng;
+
 use crate::bqf::BinaryQuadraticForm;
-use rand::rngs::OsRng;
 
 #[derive(Clone, Debug)]
 struct NizkDlogProof<Z: crate::z::Z> {

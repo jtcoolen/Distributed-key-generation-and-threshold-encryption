@@ -1,14 +1,17 @@
-use crate::z::EuclideanDivResult;
-use bytemuck::Contiguous;
 use core::cmp::Ordering;
-use rug::integer::IntegerExt64;
-use rug::ops::NegAssign;
-use rug::ops::{DivRounding, Pow};
-use rug::rand::MutRandState;
-use rug::Complete;
-use rug::Integer;
 use std::cmp::Ordering::Less;
 use std::ops::AddAssign;
+
+use rug::integer::IntegerExt64;
+use rug::ops::DivRounding;
+use rug::ops::NegAssign;
+use rug::Complete;
+use rug::Integer;
+
+use crate::z::EuclideanDivResult;
+
+// special compilation suite for wasm with emscripten
+// see https://github.com/cryspen/libcrux/blob/0f74f5a6fa7477e5dd553d6d589ab04c6fcca2bd/sys/hacl/wasm.sh
 
 impl crate::z::Z for rug::Integer {
     fn zero() -> Self {
@@ -31,7 +34,7 @@ impl crate::z::Z for rug::Integer {
         Integer::to_digits::<u8>(self, rug::integer::Order::Lsf)
     }
 
-    fn random<R: rand_core::CryptoRng>(_rng: &mut R) -> Self {
+    fn random<R: rand_core::CryptoRng + rand_core::RngCore>(_rng: &mut R) -> Self {
         let mut rand = rug::rand::RandState::new();
         Integer::random_bits(4096, &mut rand).into()
     }
@@ -171,7 +174,7 @@ impl crate::z::Z for rug::Integer {
         Integer::next_prime_ref(&self).complete()
     }
 
-    fn sample_bits<R: rand_core::CryptoRng>(nbits: u32, rng: &mut R) -> Self {
+    fn sample_bits<R: rand_core::CryptoRng + rand_core::RngCore>(nbits: u32, rng: &mut R) -> Self {
         // Calculate the number of bytes needed
         let nbytes = nbits / 8 + 1;
 
@@ -222,6 +225,7 @@ impl crate::z::Z for rug::Integer {
 
     fn sqrt_mod_prime(&self, prime: &Self) -> Option<Self> {
         // Shanks-Tonelli
+        // TODO clean this code
         if self == &Integer::ZERO {
             return Some(Integer::ZERO);
         }
@@ -229,6 +233,15 @@ impl crate::z::Z for rug::Integer {
         // Check if a is a quadratic residue modulo p
         if self.legendre(prime) != 1 {
             return None;
+        }
+
+        if prime.take_mod(&<Integer as From<u32>>::from(4u32))
+            == (<Integer as From<u32>>::from(3u32))
+        {
+            let mut exp: Integer = <Integer as From<_>>::from(prime + 1).div_exact_u(4);
+            return Some(<Integer as From<_>>::from(
+                self.pow_mod_ref(&exp, prime).unwrap(),
+            ));
         }
 
         // Find n such that n is a quadratic non-residue modulo p
@@ -291,5 +304,13 @@ impl crate::z::Z for rug::Integer {
 
     fn from_i64(i: i64) -> Self {
         <Integer as From<_>>::from(i)
+    }
+
+    fn from_string(s: &str, base: u64) -> Self {
+        Integer::from_str_radix(s, base as i32).unwrap()
+    }
+
+    fn to_bytes_be(b: Vec<u8>) -> Self {
+        Integer::from_bytes(b)
     }
 }

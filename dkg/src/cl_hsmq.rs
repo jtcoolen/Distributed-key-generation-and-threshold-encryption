@@ -1,11 +1,11 @@
 // TODO implement compact variant
 
-use bicycl::b_i_c_y_c_l::Mpz;
-use rand_core::{CryptoRng, OsRng};
-use rug::rand::MutRandState;
-use rug::Integer;
-use std::cmp::Ordering::{Greater, Less};
+use std::cmp::Ordering::Less;
 use std::fmt::Debug;
+
+use rand_core::{CryptoRng, OsRng};
+use rug::Integer;
+use thiserror::Error;
 
 use crate::bqf::{BinaryQuadraticForm, BQF};
 use crate::z;
@@ -36,14 +36,29 @@ fn discriminant_bit_size(security_level: SecurityLevel) -> u32 {
 /// with the CL framework
 pub trait ClHSMq<Z: crate::z::Z + std::fmt::Debug + Clone, BQF: BinaryQuadraticForm<Z> + Clone> {
     // setup
-    fn new<Rng: CryptoRng>(q: Z, security_level: SecurityLevel, rng: &mut Rng) -> Self;
+    fn new<Rng: CryptoRng + rand_core::RngCore>(
+        q: Z,
+        security_level: SecurityLevel,
+        rng: &mut Rng,
+    ) -> Self;
 
     // generates an asymmetric key pair (pk, sk)
-    fn keygen<Rng: CryptoRng>(&self, rng: &mut Rng) -> (BQF, Z);
+    fn keygen<Rng: CryptoRng + rand_core::RngCore>(&self, rng: &mut Rng) -> (BQF, Z);
 
     // ciphertext is composed of two binary quadratic forms
-    fn encrypt<Rng: CryptoRng>(&self, public_key: &BQF, cleartext: &Z, rng: &mut Rng)
-        -> (BQF, BQF);
+    fn encrypt<Rng: CryptoRng + rand_core::RngCore>(
+        &self,
+        public_key: &BQF,
+        cleartext: &Z,
+        rng: &mut Rng,
+    ) -> (BQF, BQF);
+
+    fn encrypt_batch<Rng: CryptoRng + rand_core::RngCore>(
+        &self,
+        public_key: &BQF,
+        cleartexts: &Vec<Z>,
+        rng: &mut Rng,
+    ) -> (BQF, Vec<BQF>);
 
     fn decrypt(&self, private_key: &Z, ciphertext: &(BQF, BQF)) -> Z;
 
@@ -51,7 +66,7 @@ pub trait ClHSMq<Z: crate::z::Z + std::fmt::Debug + Clone, BQF: BinaryQuadraticF
 
     fn scale_cleartext(&self, public_key: BQF, cleartext: Z, scaling_factor: Z) -> Z;
 
-    fn add_ciphertexts<Rng: CryptoRng>(
+    fn add_ciphertexts<Rng: CryptoRng + rand_core::RngCore>(
         &self,
         rng: &mut Rng,
         public_key: BQF,
@@ -59,7 +74,7 @@ pub trait ClHSMq<Z: crate::z::Z + std::fmt::Debug + Clone, BQF: BinaryQuadraticF
         ciphertext2: (BQF, BQF),
     ) -> (BQF, BQF);
 
-    fn scale_ciphertext<Rng: CryptoRng>(
+    fn scale_ciphertext<Rng: CryptoRng + rand_core::RngCore>(
         &self,
         rng: &mut Rng,
         public_key: BQF,
@@ -70,7 +85,7 @@ pub trait ClHSMq<Z: crate::z::Z + std::fmt::Debug + Clone, BQF: BinaryQuadraticF
 
 // We'll take q=order of BLS12-381 scalar field F_r (multiplicative order)
 // so that the messages matches scalar elements (F_r)^*
-struct ClHSMqInstance<Z, BQF>
+pub struct ClHSMqInstance<Z, BQF>
 where
     BQF: BinaryQuadraticForm<Z> + Clone,
     Z: z::Z + std::fmt::Debug + std::clone::Clone,
@@ -85,7 +100,7 @@ where
 // TODO: note that with a security level of 112 we can support up to 3 multiplications
 // of 1348-bit integers fitting inside 4096 bit ints
 
-fn sample_random_p<Z: z::Z, R: CryptoRng>(
+fn sample_random_p<Z: z::Z, R: CryptoRng + rand_core::RngCore>(
     q: &Z,
     q_bit_size: u32,
     disc_bit_size: u32,
@@ -116,7 +131,11 @@ where
     Z: z::Z + std::fmt::Debug + std::clone::Clone,
     BQF: BinaryQuadraticForm<Z> + Clone + std::fmt::Debug,
 {
-    fn new<Rng: CryptoRng>(q: Z, security_level: SecurityLevel, rng: &mut Rng) -> Self {
+    fn new<Rng: CryptoRng + rand_core::RngCore>(
+        q: Z,
+        security_level: SecurityLevel,
+        rng: &mut Rng,
+    ) -> Self {
         // "We denote η(λ) the bitsize of a fundamental discriminant ∆K such that"
         // "the computation of the class number h(∆K) and computation of discrete logarithms"
         // "in Cl(∆K ) takes at least 2^λ operations (see Table 2 for concrete sizes)."
@@ -160,13 +179,13 @@ where
     }
 
     // TODO typed secret/public keys
-    fn keygen<Rng: CryptoRng>(&self, rng: &mut Rng) -> (BQF, Z) {
+    fn keygen<Rng: CryptoRng + rand_core::RngCore>(&self, rng: &mut Rng) -> (BQF, Z) {
         let secret_key = Z::sample_range(rng, &Z::from(0), &self.class_number_H_bound);
         let public_key = self.generator_H.pow(&secret_key).reduce();
         (public_key, secret_key)
     }
 
-    fn encrypt<Rng: CryptoRng>(
+    fn encrypt<Rng: CryptoRng + rand_core::RngCore>(
         &self,
         public_key: &BQF,
         cleartext: &Z,
@@ -175,17 +194,31 @@ where
         let r = Z::sample_range(rng, &Z::from(0), &self.class_number_H_bound);
         let c1 = self.generator_H.pow(&r).reduce();
         let f_m = power_f(&self.generator_F, &self.discriminant, &self.q, &cleartext);
-
         let pk_r = public_key.pow(&r).reduce();
-        println!(
-            "f_m = {:?}, pk_r {:?}, disc fm {:?}, disc pk_r {:?}",
-            f_m,
-            pk_r,
-            f_m.discriminant(),
-            pk_r.discriminant()
-        );
         let c2 = f_m.compose(&pk_r).reduce();
         (c1, c2)
+    }
+
+    fn encrypt_batch<Rng: CryptoRng + rand_core::RngCore>(
+        &self,
+        public_key: &BQF,
+        cleartexts: &Vec<Z>,
+        rng: &mut Rng,
+    ) -> (BQF, Vec<BQF>) {
+        let r = Z::sample_range(rng, &Z::from(0), &self.class_number_H_bound);
+        let c1 = self.generator_H.pow(&r).reduce();
+        let pk_r = public_key.pow(&r).reduce();
+
+        let c2s = cleartexts
+            .iter()
+            .map(|c| {
+                power_f(&self.generator_F, &self.discriminant, &self.q, &c)
+                    .compose(&pk_r)
+                    .reduce()
+            })
+            .collect();
+
+        (c1, c2s)
     }
 
     fn decrypt(&self, private_key: &Z, ciphertext: &(BQF, BQF)) -> Z {
@@ -205,7 +238,7 @@ where
         todo!()
     }
 
-    fn add_ciphertexts<Rng: CryptoRng>(
+    fn add_ciphertexts<Rng: CryptoRng + rand_core::RngCore>(
         &self,
         rng: &mut Rng,
         public_key: BQF,
@@ -220,7 +253,7 @@ where
         (c1, c2)
     }
 
-    fn scale_ciphertext<Rng: CryptoRng>(
+    fn scale_ciphertext<Rng: CryptoRng + rand_core::RngCore>(
         &self,
         rng: &mut Rng,
         public_key: BQF,
@@ -261,7 +294,6 @@ where
     return BQF::new(&a, &b, &c);
 }
 
-use thiserror::Error;
 #[derive(Error, Debug, Clone)]
 pub enum KernelError {
     #[error("The form is not in the kernel")]

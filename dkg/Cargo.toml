@@ -9,22 +9,24 @@ edition = "2021"
 blstrs = "0.7.1"
 proptest = "1.4.0"
 criterion = "0.5.1"
-libcrux = "0.0.2-pre.2"
-serde = "1.0.203"
+serde = {version =  "1.0.203" , features = ["std", "serde_derive", "derive"]}
 hacl = {git="https://github.com/jtcoolen/hacl-packages", rev="9d54a40edbbec7b2ee370ca7961c8f95c23f65a5"}
 hacl-sys = {git="https://github.com/jtcoolen/hacl-packages", rev="9d54a40edbbec7b2ee370ca7961c8f95c23f65a5"}
 getrandom = { version = "0.2.15", features = ["js"] }
-rand_core = "0.9.0-alpha.1"
-bicycl = {git="https://github.com/hsaleemsupra/cgdkg_artifact.git"}
-bytemuck = "1.16.0"
+rand_core = "0.6.4"
+rand = "0.6.4"
 gmp-mpfr-sys = "1.6.4"
 rug = "1.24.1"
 blake3 = "1.5.1"
-rand = "0.9.0-alpha.1"
 thiserror = "1.0.61"
+group = "0.13.0"
+ff = "0.13.0"
+bincode = "1.3.2"
+bytemuck = "1.16.0"
 
 [dev-dependencies]
 proptest-derive = "0.2.0"
+bicycl = {git="https://github.com/hsaleemsupra/cgdkg_artifact.git"}
 
 [profile.test.package.proptest]
 opt-level = 3

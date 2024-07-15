@@ -66,7 +66,7 @@ impl Z for Bignum4096 {
     }
 
     // returns a positive integer sampled uniformly at random
-    fn random<R: CryptoRng>(rng: &mut R) -> Self {
+    fn random<R: CryptoRng + rand_core::RngCore>(rng: &mut R) -> Self {
         let mut limbs = [0u64; 128];
         let mut dest = [0u8; 8 * 64];
         rng.fill_bytes(&mut dest);
@@ -471,6 +471,14 @@ impl Z for Bignum4096 {
     }
 
     fn from_i64(i: i64) -> Self {
+        todo!()
+    }
+
+    fn from_string(s: &str, base: u64) -> Self {
+        todo!()
+    }
+
+    fn to_bytes_be(_: Vec<u8>) -> Self {
         todo!()
     }
 }
