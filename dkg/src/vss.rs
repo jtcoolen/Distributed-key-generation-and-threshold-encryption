@@ -1,12 +1,11 @@
 use std::fmt::Debug;
-use std::marker::PhantomData;
 
 use ff::{Field, PrimeField};
 use rand_core::{CryptoRng, RngCore};
 use serde::Serialize;
 
 use crate::bqf::BinaryQuadraticForm;
-use crate::cl_hsmq::{ClHSMq, SecurityLevel};
+use crate::cl_hsmq::ClHSMq;
 use crate::z;
 use crate::z::Z;
 
@@ -77,8 +76,8 @@ impl Scalar for blstrs::Scalar {
 }
 
 pub trait EllipticCurve<S>
-where
-    S: Scalar,
+    where
+        S: Scalar,
 {
     type Scalar;
 
@@ -94,8 +93,8 @@ where
 }
 
 impl<S> EllipticCurve<S> for blstrs::G1Projective
-where
-    S: Scalar,
+    where
+        S: Scalar,
 {
     type Scalar = blstrs::Scalar;
 
@@ -120,122 +119,113 @@ where
     }
 }
 
-pub trait NIZKProofOfCorrectSharing<Z, BQF, E, S>
-where
-    Z: crate::z::Z + std::fmt::Debug + Clone,
-    BQF: BinaryQuadraticForm<Z> + Clone + Debug,
-    E: EllipticCurve<S> + Clone,
-    S: Scalar + Clone,
-{
-    /// Creates a new instance with the given threshold.
-    /// Since the threshold is small, FFT is not required.
-    fn new(n: u32, threshold: u32, generator_H: BQF, generator_F: BQF) -> Self;
+mod ProofOfCorrectSharing {
+    use std::marker::PhantomData;
 
-    /// Generates a proof for the given instance and witness.
-    fn prove<R: CryptoRng + RngCore>(
-        &self,
-        instance: &Instance<Z, BQF, E, S>,
-        witness: &Witness<Z, S>,
-        rng: &mut R,
-    ) -> Proof<Z, BQF, E, S>;
+    use rand_core::{CryptoRng, RngCore};
+    use serde::Serialize;
 
-    /// Verifies the given proof against the provided instance.
-    fn verify(&self, instance: &Instance<Z, BQF, E, S>, proof: &Proof<Z, BQF, E, S>) -> bool;
-}
+    use crate::bqf::BinaryQuadraticForm;
+    use crate::vss::{EllipticCurve, Scalar};
+    use crate::z;
 
-struct Witness<Z, S>
-where
-    Z: crate::z::Z,
-    S: Scalar + Clone,
-{
-    s: Vec<S>,
-    r: Z,
-}
+    #[derive(Serialize)]
+    pub(crate) struct Config<BQF, Z>
+        where
+            Z: crate::z::Z + std::fmt::Debug + Clone,
+            BQF: BinaryQuadraticForm<Z> + Serialize,
+    {
+        n: u32,
+        threshold: u32,
+        generator_H: BQF,
+        generator_F: BQF,
+        _integer_type: PhantomData<Z>,
+    }
 
-fn vec_z_tobytes<S, Z>(v: &Vec<Z>, serializer: S) -> Result<S::Ok, S::Error>
-where
-    S: serde::Serializer,
-    Z: z::Z,
-{
-    let res = v.iter().flat_map(|e| e.to_bytes()).collect::<Vec<u8>>();
+    pub(crate) struct Witness<Z, S>
+        where
+            Z: crate::z::Z,
+            S: Scalar + Clone,
+    {
+        pub(crate) s: Vec<S>,
+        pub(crate) r: Z,
+    }
 
-    serializer.serialize_bytes(&res)
-}
+    fn vec_z_tobytes<S, Z>(v: &Vec<Z>, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer,
+            Z: z::Z,
+    {
+        let res = v.iter().flat_map(|e| e.to_bytes()).collect::<Vec<u8>>();
 
-fn vec_ec_tobytes<S, E, Z>(v: &Vec<E>, serializer: S) -> Result<S::Ok, S::Error>
-where
-    S: serde::Serializer,
-    Z: Scalar,
-    E: EllipticCurve<Z>,
-{
-    let res = v.iter().flat_map(|e| e.to_bytes()).collect::<Vec<u8>>();
+        serializer.serialize_bytes(&res)
+    }
 
-    serializer.serialize_bytes(&res)
-}
+    fn vec_ec_tobytes<S, E, Z>(v: &Vec<E>, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer,
+            Z: Scalar,
+            E: EllipticCurve<Z>,
+    {
+        let res = v.iter().flat_map(|e| e.to_bytes()).collect::<Vec<u8>>();
 
-fn bqf_tobytes<S, BQF, Z>(v: &BQF, serializer: S) -> Result<S::Ok, S::Error>
-where
-    S: serde::Serializer,
-    Z: z::Z + std::fmt::Debug + std::clone::Clone,
-    BQF: BinaryQuadraticForm<Z>,
-{
-    let res = v.to_bytes();
+        serializer.serialize_bytes(&res)
+    }
 
-    serializer.serialize_bytes(&res)
-}
+    fn bqf_tobytes<S, BQF, Z>(v: &BQF, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer,
+            Z: z::Z + std::fmt::Debug + std::clone::Clone,
+            BQF: BinaryQuadraticForm<Z>,
+    {
+        let res = v.to_bytes();
 
-#[derive(Serialize)]
-pub struct Instance<Z, BQF, E, S>
-where
-    Z: crate::z::Z + std::fmt::Debug + Clone,
-    BQF: BinaryQuadraticForm<Z> + std::clone::Clone + std::fmt::Debug,
-    E: EllipticCurve<S> + Clone,
-    S: Scalar,
-{
-    public_keys: Vec<BQF>,
-    ciphertexts_common: BQF,
-    ciphertexts: Vec<BQF>,
-    #[serde(serialize_with = "vec_ec_tobytes")]
-    polynomial_coefficients_commitments: Vec<E>,
-    _scalar_type: PhantomData<S>,
-    _int_type: PhantomData<Z>,
-}
+        serializer.serialize_bytes(&res)
+    }
 
-struct Proof<Z, BQF, E, S>
-where
-    Z: crate::z::Z + std::fmt::Debug + Clone,
-    BQF: BinaryQuadraticForm<Z>,
-    E: EllipticCurve<S>,
-    S: Scalar,
-{
-    w: BQF,
-    x: E,
-    y: BQF,
-    z_r: Z, // integer
-    z_s: S, // scalar field
-}
+    #[derive(Serialize)]
+    pub struct Instance<Z, BQF, E, S>
+        where
+            Z: crate::z::Z + std::fmt::Debug + Clone,
+            BQF: BinaryQuadraticForm<Z> + std::clone::Clone + std::fmt::Debug,
+            E: EllipticCurve<S> + Clone,
+            S: Scalar,
+    {
+        pub(crate) public_keys: Vec<BQF>,
+        pub(crate) ciphertexts_common: BQF,
+        pub(crate) ciphertexts: Vec<BQF>,
+        #[serde(serialize_with = "vec_ec_tobytes")]
+        pub(crate) polynomial_coefficients_commitments: Vec<E>,
+        pub(crate) _scalar_type: PhantomData<S>,
+        pub(crate) _int_type: PhantomData<Z>,
+    }
 
-struct PoCS<BQF, Z>
-where
-    Z: crate::z::Z + std::fmt::Debug + Clone,
-    BQF: BinaryQuadraticForm<Z>,
-{
-    n: u32,
-    threshold: u32,
-    generator_H: BQF,
-    generator_F: BQF,
-    _integer_type: PhantomData<Z>,
-}
+    pub(crate) struct Proof<Z, BQF, E, S>
+        where
+            Z: crate::z::Z + std::fmt::Debug + Clone,
+            BQF: BinaryQuadraticForm<Z>,
+            E: EllipticCurve<S>,
+            S: Scalar,
+    {
+        w: BQF,
+        x: E,
+        y: BQF,
+        z_r: Z, // integer
+        z_s: S, // scalar field
+    }
 
-impl<Z, BQF, E, S> NIZKProofOfCorrectSharing<Z, BQF, E, S> for PoCS<BQF, Z>
-where
-    Z: crate::z::Z + std::fmt::Debug + Clone,
-    BQF: BinaryQuadraticForm<Z> + Clone + std::fmt::Debug + Serialize,
-    E: EllipticCurve<S, Scalar = S> + std::clone::Clone,
-    S: Scalar + Clone,
-{
-    fn new(n: u32, threshold: u32, generator_H: BQF, generator_F: BQF) -> Self {
-        PoCS {
+    pub(crate) fn new<
+        Z: crate::z::Z + std::fmt::Debug + Clone,
+        BQF: BinaryQuadraticForm<Z> + Clone + std::fmt::Debug + Serialize,
+        E: EllipticCurve<S, Scalar=S> + std::clone::Clone,
+        S: Scalar + Clone,
+    >(
+        n: u32,
+        threshold: u32,
+        generator_H: BQF,
+        generator_F: BQF,
+    ) -> Config<BQF, Z> {
+        Config {
             n,
             threshold,
             generator_H,
@@ -244,15 +234,21 @@ where
         }
     }
 
-    fn prove<R: CryptoRng + RngCore>(
-        &self,
+    pub(crate) fn prove<
+        R: CryptoRng + RngCore,
+        Z: crate::z::Z + std::fmt::Debug + Clone,
+        BQF: BinaryQuadraticForm<Z> + Clone + std::fmt::Debug + Serialize,
+        E: EllipticCurve<S, Scalar=S> + std::clone::Clone,
+        S: Scalar + Clone,
+    >(
+        config: &Config<BQF, Z>,
         instance: &Instance<Z, BQF, E, S>,
         witness: &Witness<Z, S>,
         rng: &mut R,
     ) -> Proof<Z, BQF, E, S> {
         let alpha = S::random(rng);
         let rho = Z::sample_range(rng, &Z::zero(), &S::modulus_as_z()); // TODO correct range
-        let w = self.generator_H.pow(&rho);
+        let w = config.generator_H.pow(&rho);
 
         let mut x = E::generator();
         x.mul_assign(&alpha);
@@ -275,7 +271,7 @@ where
             })
             .unwrap()
             .pow(&rho);
-        y = y.compose(&self.generator_F.pow(&S::to_z(&alpha))); // TODO: One can use faster power_of_f here
+        y = y.compose(&config.generator_F.pow(&S::to_z(&alpha))); // TODO: One can use faster power_of_f here
 
         let mut hasher = blake3::Hasher::new();
         hasher.update(gamma_z.to_bytes().as_slice());
@@ -299,7 +295,16 @@ where
         Proof { w, x, y, z_r, z_s }
     }
 
-    fn verify(&self, instance: &Instance<Z, BQF, E, S>, proof: &Proof<Z, BQF, E, S>) -> bool {
+    pub(crate) fn verify<
+        Z: crate::z::Z + std::fmt::Debug + Clone,
+        BQF: BinaryQuadraticForm<Z> + Clone + std::fmt::Debug + Serialize,
+        E: EllipticCurve<S, Scalar=S> + std::clone::Clone,
+        S: Scalar + Clone,
+    >(
+        config: &Config<BQF, Z>,
+        instance: &Instance<Z, BQF, E, S>,
+        proof: &Proof<Z, BQF, E, S>,
+    ) -> bool {
         let mut hasher = blake3::Hasher::new();
         hasher.update(bincode::serialize(&instance).unwrap().as_slice());
         let mut gamma = hasher.finalize().as_bytes().to_vec();
@@ -319,7 +324,7 @@ where
         let lhs = proof
             .w
             .compose(&instance.ciphertexts_common.pow(&gamma_prime_z));
-        let rhs = self.generator_H.pow(&proof.z_r);
+        let rhs = config.generator_H.pow(&proof.z_r);
         if !lhs.equals(&rhs) {
             return false;
         }
@@ -331,7 +336,7 @@ where
             .enumerate()
             .reduce(|(_, acc), (j, mut a_j)| {
                 let pow_gamma = gamma_s.pow(j as u64);
-                let exp = (1..=self.n).fold(S::zero(), |mut acc, i| {
+                let exp = (1..=config.n).fold(S::zero(), |mut acc, i| {
                     acc.add_assign(&pow_gamma);
                     acc.mul_assign(&S::from(i.pow(j as u32) as u64));
                     acc
@@ -377,7 +382,7 @@ where
             .unwrap();
         rhs = rhs
             .pow(&proof.z_r)
-            .compose(&self.generator_F.pow(&S::to_z(&proof.z_s))); // TODO: One can use faster power_of_f here
+            .compose(&config.generator_F.pow(&S::to_z(&proof.z_s))); // TODO: One can use faster power_of_f here
         if !lhs.equals(&rhs) {
             return false;
         }
@@ -386,8 +391,8 @@ where
 }
 
 pub trait Polynomial<S>
-where
-    S: Scalar,
+    where
+        S: Scalar,
 {
     type Scalar;
     fn random<R: RngCore + CryptoRng>(rng: &mut R, degree: usize) -> Self;
@@ -400,8 +405,8 @@ where
 }
 
 impl<S> Polynomial<S> for Vec<blstrs::Scalar>
-where
-    S: Scalar,
+    where
+        S: Scalar,
 {
     type Scalar = blstrs::Scalar;
 
@@ -428,17 +433,25 @@ where
     }
 }
 
-pub trait VerifiableSecretSharingPrimitives<LinearHomomorphicEncryption, Z, S, P, E, BQF, PoCS>
-where
-    LinearHomomorphicEncryption: ClHSMq<Z, BQF>,
-    Z: crate::z::Z + std::fmt::Debug + Clone,
-    BQF: BinaryQuadraticForm<Z> + Clone + Debug,
-    E: EllipticCurve<S, Scalar = S> + Clone,
-    S: Scalar + Clone,
-    P: Polynomial<S, Scalar = S>,
-    PoCS: NIZKProofOfCorrectSharing<Z, BQF, E, S>,
-{
-    fn share<R: RngCore + CryptoRng>(
+pub mod VerifiableSecretSharingPrimitives {
+    use std::fmt::Debug;
+
+    use rand_core::{CryptoRng, RngCore};
+    use serde::Serialize;
+
+    use crate::bqf::BinaryQuadraticForm;
+    use crate::cl_hsmq::{ClHSMq, ClHSMqInstance};
+    use crate::vss::{EllipticCurve, Polynomial, ProofOfCorrectSharing, Scalar};
+    use crate::vss::ProofOfCorrectSharing::Proof;
+
+    pub fn share<
+        R: RngCore + CryptoRng,
+        Z: crate::z::Z + std::fmt::Debug + Clone,
+        BQF: BinaryQuadraticForm<Z> + Clone + Debug,
+        E: EllipticCurve<S, Scalar=S> + Clone,
+        S: Scalar + Clone,
+        P: Polynomial<S, Scalar=S>,
+    >(
         rng: &mut R,
         n: usize,
         threshold: usize,
@@ -460,14 +473,21 @@ where
         (s_i, cmt)
     }
 
-    fn encrypt<R: RngCore + CryptoRng>(
+    pub fn encrypt<
+        R: RngCore + CryptoRng,
+        Z: crate::z::Z + std::fmt::Debug + Clone,
+        BQF: BinaryQuadraticForm<Z> + Clone + Debug + Serialize,
+        E: EllipticCurve<S, Scalar=S> + Clone,
+        S: Scalar + Clone,
+        P: Polynomial<S, Scalar=S>,
+    >(
         rng: &mut R,
-        enc_scheme: &LinearHomomorphicEncryption,
-        proof_of_correct_sharing: &PoCS,
+        enc_scheme: &ClHSMqInstance<Z, BQF>,
+        pocs_config: &ProofOfCorrectSharing::Config<BQF, Z>,
         cmt: &Vec<E>,
         shares: &Vec<S>,
         pub_keys: &Vec<BQF>,
-    ) -> (BQF, Vec<BQF>, Proof<Z, BQF, E, S>) {
+    ) -> (BQF, Vec<BQF>, ProofOfCorrectSharing::Proof<Z, BQF, E, S>) {
         // compute class number bound
         let r = Z::random(rng);
         let (common, encryptions) = enc_scheme.encrypt_batch(
@@ -475,7 +495,7 @@ where
             &shares.iter().map(|s| s.to_z()).collect::<Vec<Z>>(),
             rng,
         );
-        let instance = Instance {
+        let instance = ProofOfCorrectSharing::Instance {
             public_keys: pub_keys.clone(),
             ciphertexts_common: common.clone(),
             ciphertexts: encryptions.clone(),
@@ -483,24 +503,31 @@ where
             _scalar_type: Default::default(),
             _int_type: Default::default(),
         };
-        let witness = Witness {
+        let witness = ProofOfCorrectSharing::Witness {
             s: shares.clone(),
             r,
         };
-        let proof: Proof<Z, BQF, E, S> = proof_of_correct_sharing.prove(&instance, &witness, rng);
+        let proof: Proof<Z, BQF, E, S> =
+            ProofOfCorrectSharing::prove(pocs_config, &instance, &witness, rng);
 
         (common, encryptions, proof)
     }
 
-    fn verify(
-        proof_of_correct_sharing: &PoCS,
+    pub fn verify<
+        Z: crate::z::Z + std::fmt::Debug + Clone,
+        BQF: BinaryQuadraticForm<Z> + Clone + Debug + Serialize,
+        E: EllipticCurve<S, Scalar=S> + Clone,
+        S: Scalar + Clone,
+        P: Polynomial<S, Scalar=S>,
+    >(
+        pocs_config: &ProofOfCorrectSharing::Config<BQF, Z>,
         cmt: &Vec<E>,
         common_enc: &BQF,
         enc_shares: &Vec<BQF>,
         pub_keys: &Vec<BQF>,
         proof: &Proof<Z, BQF, E, S>,
     ) -> bool {
-        let instance = Instance {
+        let instance = ProofOfCorrectSharing::Instance {
             public_keys: pub_keys.clone(),
             ciphertexts_common: common_enc.clone(),
             ciphertexts: enc_shares.clone(),
@@ -508,11 +535,17 @@ where
             _scalar_type: Default::default(),
             _int_type: Default::default(),
         };
-        proof_of_correct_sharing.verify(&instance, &proof)
+        ProofOfCorrectSharing::verify(pocs_config, &instance, &proof)
     }
 
-    fn decrypt(
-        enc_scheme: &LinearHomomorphicEncryption,
+    pub fn decrypt<
+        Z: crate::z::Z + std::fmt::Debug + Clone,
+        BQF: BinaryQuadraticForm<Z> + Clone + Debug,
+        E: EllipticCurve<S, Scalar=S> + Clone,
+        S: Scalar + Clone,
+        P: Polynomial<S, Scalar=S>,
+    >(
+        enc_scheme: &ClHSMqInstance<Z, BQF>,
         sk: &Z,
         common_enc: &BQF,
         enc_share: &BQF,
@@ -522,7 +555,17 @@ where
         ))
     }
 
-    fn verify_commitment(cmt: &Vec<E>, share_index: usize, share: &S) -> bool {
+    pub fn verify_commitment<
+        Z: crate::z::Z + std::fmt::Debug + Clone,
+        BQF: BinaryQuadraticForm<Z> + Clone + Debug,
+        E: EllipticCurve<S, Scalar=S> + Clone,
+        S: Scalar + Clone,
+        P: Polynomial<S, Scalar=S>,
+    >(
+        cmt: &Vec<E>,
+        share_index: usize,
+        share: &S,
+    ) -> bool {
         let mut lhs = E::generator();
         lhs.mul_assign(share);
 
@@ -541,68 +584,80 @@ where
     }
 }
 
-pub struct Config<BQF, Z, LinearHomomorphicEncryption>
-where
-    Z: crate::z::Z + std::fmt::Debug + Clone,
-    BQF: BinaryQuadraticForm<Z> + Clone + Debug,
-    LinearHomomorphicEncryption: ClHSMq<Z, BQF>,
-{
-    n: usize,
-    threshold: usize,
-    public_keys: Vec<BQF>,
-    index: usize,
-    public_key: BQF,
-    secret_key: Z,
-    security_level: SecurityLevel,
-    q: Z,
-    encryption_scheme: LinearHomomorphicEncryption,
-}
+pub mod NIVSS {
+    use std::fmt::Debug;
 
-pub struct Dealing<BQF, E, S, Z>
-where
-    Z: crate::z::Z + std::fmt::Debug + Clone,
-    BQF: BinaryQuadraticForm<Z> + Clone + Debug,
-    E: EllipticCurve<S, Scalar = S> + Clone,
-    S: Scalar + Clone,
-{
-    common_encryption: BQF,
-    encryptions: Vec<BQF>,
-    correct_sharing_proof: Proof<Z, BQF, E, S>,
-    cmt: Vec<E>,
-}
+    use rand_core::{CryptoRng, RngCore};
+    use serde::Serialize;
 
-pub trait NIVSS<LinearHomomorphicEncryption, VSS, Z, S, P, E, BQF, PoCS>
-where
-    VSS: VerifiableSecretSharingPrimitives<LinearHomomorphicEncryption, Z, S, P, E, BQF, PoCS>,
-    LinearHomomorphicEncryption: ClHSMq<Z, BQF>,
-    Z: crate::z::Z + std::fmt::Debug + Clone,
-    BQF: BinaryQuadraticForm<Z> + Clone + Debug,
-    E: EllipticCurve<S, Scalar = S> + Clone,
-    S: Scalar + Clone,
-    P: Polynomial<S, Scalar = S>,
-    PoCS: NIZKProofOfCorrectSharing<Z, BQF, E, S>,
-{
-    fn generate_dealing<R: RngCore + CryptoRng>(
+    use crate::bqf::BinaryQuadraticForm;
+    use crate::cl_hsmq::{ClHSMq, ClHSMqInstance, SecurityLevel};
+    use crate::vss::{
+        EllipticCurve, Polynomial, ProofOfCorrectSharing, Scalar, VerifiableSecretSharingPrimitives,
+    };
+
+    pub struct Config<BQF, Z>
+        where
+            Z: crate::z::Z + std::fmt::Debug + Clone,
+            BQF: BinaryQuadraticForm<Z> + Clone + Debug,
+    {
+        n: usize,
+        threshold: usize,
+        public_keys: Vec<BQF>,
+        index: usize,
+        public_key: BQF,
+        secret_key: Z,
+        security_level: SecurityLevel,
+        q: Z,
+        pub(crate) encryption_scheme: ClHSMqInstance<Z, BQF>,
+    }
+
+    pub struct Dealing<BQF, E, S, Z>
+        where
+            Z: crate::z::Z + std::fmt::Debug + Clone,
+            BQF: BinaryQuadraticForm<Z> + Clone + Debug,
+            E: EllipticCurve<S, Scalar=S> + Clone,
+            S: Scalar + Clone,
+    {
+        common_encryption: BQF,
+        encryptions: Vec<BQF>,
+        correct_sharing_proof: ProofOfCorrectSharing::Proof<Z, BQF, E, S>,
+        cmt: Vec<E>,
+    }
+
+    fn generate_dealing<
+        R: RngCore + CryptoRng,
+        Z: crate::z::Z + std::fmt::Debug + Clone,
+        BQF: BinaryQuadraticForm<Z> + Clone + Debug + Serialize,
+        E: EllipticCurve<S, Scalar=S> + Clone,
+        S: Scalar + Clone,
+        P: Polynomial<S, Scalar=S>,
+    >(
         rng: &mut R,
-        cfg: Config<BQF, Z, LinearHomomorphicEncryption>,
+        cfg: Config<BQF, Z>,
     ) -> Dealing<BQF, E, S, Z> {
         let s = S::random(rng);
-        let (shares, cmt) = VSS::share(rng, cfg.n, cfg.threshold, &s);
-        //let enc_scheme: LinearHomomorphicEncryption = LinearHomomorphicEncryption::new(cfg.q, cfg.security_level, rng);
-        let pocs = PoCS::new(
+        let (shares, cmt) = VerifiableSecretSharingPrimitives::share::<R, Z, BQF, E, S, P>(
+            rng,
+            cfg.n,
+            cfg.threshold,
+            &s,
+        );
+        let pocs = ProofOfCorrectSharing::new::<Z, BQF, E, S>(
             cfg.n as u32,
             cfg.threshold as u32,
             cfg.encryption_scheme.generator_h(),
             cfg.encryption_scheme.generator_f(),
         );
-        let (common, encryptions, correct_sharing_proof) = VSS::encrypt(
-            rng,
-            &cfg.encryption_scheme,
-            &pocs,
-            &cmt,
-            &shares,
-            &cfg.public_keys,
-        );
+        let (common, encryptions, correct_sharing_proof) =
+            VerifiableSecretSharingPrimitives::encrypt::<R, Z, BQF, E, S, P>(
+                rng,
+                &cfg.encryption_scheme,
+                &pocs,
+                &cmt,
+                &shares,
+                &cfg.public_keys,
+            );
         Dealing {
             common_encryption: common,
             encryptions,
@@ -611,17 +666,23 @@ where
         }
     }
 
-    fn verify_dealing(
-        cfg: Config<BQF, Z, LinearHomomorphicEncryption>,
+    fn verify_dealing<
+        Z: crate::z::Z + std::fmt::Debug + Clone,
+        BQF: BinaryQuadraticForm<Z> + Clone + Debug + Serialize,
+        E: EllipticCurve<S, Scalar=S> + Clone,
+        S: Scalar + Clone,
+        P: Polynomial<S, Scalar=S>,
+    >(
+        cfg: Config<BQF, Z>,
         dealing: Dealing<BQF, E, S, Z>,
     ) -> Option<S> {
-        let pocs = PoCS::new(
+        let pocs = ProofOfCorrectSharing::new::<Z, BQF, E, S>(
             cfg.n as u32,
             cfg.threshold as u32,
             cfg.encryption_scheme.generator_h(),
             cfg.encryption_scheme.generator_f(),
         );
-        if !VSS::verify(
+        if !VerifiableSecretSharingPrimitives::verify::<Z, BQF, E, S, P>(
             &pocs,
             &dealing.cmt,
             &dealing.common_encryption,
@@ -632,7 +693,7 @@ where
             return None;
         }
 
-        let s = VSS::decrypt(
+        let s = VerifiableSecretSharingPrimitives::decrypt::<Z, BQF, E, S, P>(
             &cfg.encryption_scheme,
             &cfg.secret_key,
             &dealing.common_encryption,
@@ -641,4 +702,38 @@ where
 
         Some(s)
     }
+}
+
+// TODO modify interface to compile valid dealings into a single transcript
+// then provide the ability to derive the master public key and share of the corresponding
+// master secret key?
+mod NIDKG {
+    use std::fmt::Debug;
+
+    use rand_core::{CryptoRng, RngCore};
+
+    use crate::bqf::BinaryQuadraticForm;
+    use crate::cl_hsmq::ClHSMq;
+    use crate::vss::NIVSS::Config;
+
+    // key pair+proof of possession
+    fn generate_key_pair<
+        R: RngCore + CryptoRng,
+        Z: crate::z::Z + std::fmt::Debug + Clone,
+        BQF: BinaryQuadraticForm<Z> + Clone + Debug,
+    >(
+        cfg: &Config<BQF, Z>,
+        rng: &mut R,
+    ) {
+        let (public_key, secret_key) = cfg.encryption_scheme.keygen(rng);
+        todo!()
+    }
+
+    fn verify_public_keys() {}
+
+    fn generate_dealing() {}
+
+    fn verify_dealing() {}
+
+    fn aggregate_dealings() {}
 }
