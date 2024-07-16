@@ -6,7 +6,7 @@ use rand_core::{CryptoRng, RngCore};
 use serde::Serialize;
 
 use crate::bqf::BinaryQuadraticForm;
-use crate::cl_hsmq::ClHSMq;
+use crate::cl_hsmq::{ClHSMq, SecurityLevel};
 use crate::z;
 use crate::z::Z;
 
@@ -129,13 +129,7 @@ where
 {
     /// Creates a new instance with the given threshold.
     /// Since the threshold is small, FFT is not required.
-    fn new<R: CryptoRng + RngCore>(
-        n: u32,
-        threshold: u32,
-        generator_H: BQF,
-        generator_F: BQF,
-        rng: &mut R,
-    ) -> Self;
+    fn new(n: u32, threshold: u32, generator_H: BQF, generator_F: BQF) -> Self;
 
     /// Generates a proof for the given instance and witness.
     fn prove<R: CryptoRng + RngCore>(
@@ -240,14 +234,14 @@ where
     E: EllipticCurve<S, Scalar = S> + std::clone::Clone,
     S: Scalar + Clone,
 {
-    fn new<R: CryptoRng + RngCore>(
-        n: u32,
-        threshold: u32,
-        generator_H: BQF,
-        generator_F: BQF,
-        rng: &mut R,
-    ) -> Self {
-        todo!()
+    fn new(n: u32, threshold: u32, generator_H: BQF, generator_F: BQF) -> Self {
+        PoCS {
+            n,
+            threshold,
+            generator_H,
+            generator_F,
+            _integer_type: Default::default(),
+        }
     }
 
     fn prove<R: CryptoRng + RngCore>(
@@ -544,5 +538,107 @@ where
             .unwrap();
 
         lhs.equals(&rhs)
+    }
+}
+
+pub struct Config<BQF, Z, LinearHomomorphicEncryption>
+where
+    Z: crate::z::Z + std::fmt::Debug + Clone,
+    BQF: BinaryQuadraticForm<Z> + Clone + Debug,
+    LinearHomomorphicEncryption: ClHSMq<Z, BQF>,
+{
+    n: usize,
+    threshold: usize,
+    public_keys: Vec<BQF>,
+    index: usize,
+    public_key: BQF,
+    secret_key: Z,
+    security_level: SecurityLevel,
+    q: Z,
+    encryption_scheme: LinearHomomorphicEncryption,
+}
+
+pub struct Dealing<BQF, E, S, Z>
+where
+    Z: crate::z::Z + std::fmt::Debug + Clone,
+    BQF: BinaryQuadraticForm<Z> + Clone + Debug,
+    E: EllipticCurve<S, Scalar = S> + Clone,
+    S: Scalar + Clone,
+{
+    common_encryption: BQF,
+    encryptions: Vec<BQF>,
+    correct_sharing_proof: Proof<Z, BQF, E, S>,
+    cmt: Vec<E>,
+}
+
+pub trait NIVSS<LinearHomomorphicEncryption, VSS, Z, S, P, E, BQF, PoCS>
+where
+    VSS: VerifiableSecretSharingPrimitives<LinearHomomorphicEncryption, Z, S, P, E, BQF, PoCS>,
+    LinearHomomorphicEncryption: ClHSMq<Z, BQF>,
+    Z: crate::z::Z + std::fmt::Debug + Clone,
+    BQF: BinaryQuadraticForm<Z> + Clone + Debug,
+    E: EllipticCurve<S, Scalar = S> + Clone,
+    S: Scalar + Clone,
+    P: Polynomial<S, Scalar = S>,
+    PoCS: NIZKProofOfCorrectSharing<Z, BQF, E, S>,
+{
+    fn generate_dealing<R: RngCore + CryptoRng>(
+        rng: &mut R,
+        cfg: Config<BQF, Z, LinearHomomorphicEncryption>,
+    ) -> Dealing<BQF, E, S, Z> {
+        let s = S::random(rng);
+        let (shares, cmt) = VSS::share(rng, cfg.n, cfg.threshold, &s);
+        //let enc_scheme: LinearHomomorphicEncryption = LinearHomomorphicEncryption::new(cfg.q, cfg.security_level, rng);
+        let pocs = PoCS::new(
+            cfg.n as u32,
+            cfg.threshold as u32,
+            cfg.encryption_scheme.generator_h(),
+            cfg.encryption_scheme.generator_f(),
+        );
+        let (common, encryptions, correct_sharing_proof) = VSS::encrypt(
+            rng,
+            &cfg.encryption_scheme,
+            &pocs,
+            &cmt,
+            &shares,
+            &cfg.public_keys,
+        );
+        Dealing {
+            common_encryption: common,
+            encryptions,
+            correct_sharing_proof,
+            cmt,
+        }
+    }
+
+    fn verify_dealing(
+        cfg: Config<BQF, Z, LinearHomomorphicEncryption>,
+        dealing: Dealing<BQF, E, S, Z>,
+    ) -> Option<S> {
+        let pocs = PoCS::new(
+            cfg.n as u32,
+            cfg.threshold as u32,
+            cfg.encryption_scheme.generator_h(),
+            cfg.encryption_scheme.generator_f(),
+        );
+        if !VSS::verify(
+            &pocs,
+            &dealing.cmt,
+            &dealing.common_encryption,
+            &dealing.encryptions,
+            &cfg.public_keys,
+            &dealing.correct_sharing_proof,
+        ) {
+            return None;
+        }
+
+        let s = VSS::decrypt(
+            &cfg.encryption_scheme,
+            &cfg.secret_key,
+            &dealing.common_encryption,
+            &dealing.encryptions[cfg.index],
+        );
+
+        Some(s)
     }
 }

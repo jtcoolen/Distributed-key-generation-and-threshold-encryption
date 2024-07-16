@@ -81,6 +81,10 @@ pub trait ClHSMq<Z: crate::z::Z + std::fmt::Debug + Clone, BQF: BinaryQuadraticF
         ciphertext: (BQF, BQF),
         scaling_factor: Z,
     ) -> (BQF, BQF);
+
+    fn generator_f(&self) -> BQF;
+
+    fn generator_h(&self) -> BQF;
 }
 
 // We'll take q=order of BLS12-381 scalar field F_r (multiplicative order)
@@ -266,6 +270,14 @@ where
         let c1 = c1_scaled.compose(&self.generator_H.pow(&r)).reduce();
         let c2 = c2_scaled.compose(&public_key.pow(&r)).reduce();
         (c1, c2)
+    }
+
+    fn generator_f(&self) -> BQF {
+        self.generator_F.clone()
+    }
+
+    fn generator_h(&self) -> BQF {
+        self.generator_H.clone()
     }
 }
 
