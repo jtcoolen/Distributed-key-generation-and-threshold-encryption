@@ -1,13 +1,15 @@
-// TODO implement compact variant
+// SPDX-FileCopyrightText: 2024 Nomadic Labs <contact@nomadic-labs.com>
+//
+// SPDX-License-Identifier: MIT
 
 use std::cmp::Ordering::Less;
 use std::fmt::Debug;
 
 use rand_core::{CryptoRng, OsRng};
 use rug::Integer;
-use thiserror::Error;
 
 use crate::bqf::{BinaryQuadraticForm, BQF};
+use crate::vss::Scalar;
 use crate::z;
 
 #[derive(Clone, Copy)]
@@ -58,7 +60,7 @@ pub trait ClHSMq<Z: crate::z::Z + std::fmt::Debug + Clone, BQF: BinaryQuadraticF
         public_keys: &Vec<BQF>,
         cleartexts: &Vec<Z>,
         rng: &mut Rng,
-    ) -> (BQF, Vec<BQF>);
+    ) -> (BQF, Vec<BQF>, Z);
 
     fn decrypt(&self, private_key: &Z, ciphertext: &(BQF, BQF)) -> Z;
 
@@ -85,10 +87,13 @@ pub trait ClHSMq<Z: crate::z::Z + std::fmt::Debug + Clone, BQF: BinaryQuadraticF
     fn generator_f(&self) -> BQF;
 
     fn generator_h(&self) -> BQF;
+
+    fn class_number_bound_h(&self) -> Z;
 }
 
 // We'll take q=order of BLS12-381 scalar field F_r (multiplicative order)
-// so that the messages matches scalar elements (F_r)^*
+// so that the messages matches scalar elements (F_r)^
+#[derive(Clone)]
 pub struct ClHSMqInstance<Z, BQF>
 where
     BQF: BinaryQuadraticForm<Z> + Clone,
@@ -97,7 +102,7 @@ where
     class_number_H_bound: Z,
     generator_F: BQF,
     generator_H: BQF,
-    discriminant: Z,
+    pub(crate) discriminant: Z,
     q: Z,
 }
 
@@ -197,7 +202,9 @@ where
     ) -> (BQF, BQF) {
         let r = Z::sample_range(rng, &Z::from(0), &self.class_number_H_bound);
         let c1 = self.generator_H.pow(&r).reduce();
-        let f_m = power_f(&self.generator_F, &self.discriminant, &self.q, &cleartext);
+        println!("disc H = {:?}", self.generator_H.discriminant());
+        println!("disc F = {:?}", self.generator_F.discriminant());
+        let f_m = power_f(&self.generator_F, &self.discriminant, &self.q, &cleartext).reduce();
         let pk_r = public_key.pow(&r).reduce();
         let c2 = f_m.compose(&pk_r).reduce();
         (c1, c2)
@@ -208,7 +215,7 @@ where
         public_keys: &Vec<BQF>,
         cleartexts: &Vec<Z>,
         rng: &mut Rng,
-    ) -> (BQF, Vec<BQF>) {
+    ) -> (BQF, Vec<BQF>, Z) {
         let r = Z::sample_range(rng, &Z::from(0), &self.class_number_H_bound);
         let c1 = self.generator_H.pow(&r).reduce();
 
@@ -217,12 +224,13 @@ where
             .zip(public_keys)
             .map(|(c, k)| {
                 power_f(&self.generator_F, &self.discriminant, &self.q, &c)
+                    .reduce()
                     .compose(&k.pow(&r).reduce())
                     .reduce()
             })
             .collect();
 
-        (c1, c2s)
+        (c1, c2s, r)
     }
 
     fn decrypt(&self, private_key: &Z, ciphertext: &(BQF, BQF)) -> Z {
@@ -231,7 +239,7 @@ where
             .reduce()
             .compose(&ciphertext.0.reduce().pow(&private_key).inverse().reduce())
             .reduce();
-        self.dlog_solve_F(&dlog)
+        self.dlog_solve_F(&dlog).take_mod(&self.q)
     }
 
     fn add_cleartexts(&self, public_key: BQF, cleartext1: Z, cleartext2: Z) -> Z {
@@ -279,9 +287,13 @@ where
     fn generator_h(&self) -> BQF {
         self.generator_H.clone()
     }
+
+    fn class_number_bound_h(&self) -> Z {
+        self.class_number_H_bound.clone()
+    }
 }
 
-fn power_f<Z, BQF>(f: &BQF, disc: &Z, q: &Z, cleartext: &Z) -> BQF
+pub fn power_f<Z, BQF>(f: &BQF, disc: &Z, q: &Z, cleartext: &Z) -> BQF
 where
     BQF: BinaryQuadraticForm<Z> + Clone + std::fmt::Debug,
     Z: std::clone::Clone + std::fmt::Debug + z::Z,
@@ -304,14 +316,6 @@ where
     c.divide_by_4(); /* c = (Lm^2-Delta_K)/4 */
 
     return BQF::new(&a, &b, &c);
-}
-
-#[derive(Error, Debug, Clone)]
-pub enum KernelError {
-    #[error("The form is not in the kernel")]
-    NotInKernel,
-    #[error("an error occurred: {0}")]
-    Other(String),
 }
 
 impl<Z, BQF> ClHSMqInstance<Z, BQF>
@@ -343,11 +347,8 @@ fn compute_generator_H<
     while discriminant_conductor_q.kronecker(&l) != 1 {
         l = l.next_prime();
     }
-    BQF::prime_form(discriminant_conductor_q, &l)
-        .double()
-        .reduce()
-        .pow(q)
-        .reduce()
+    let pf = BQF::prime_form(discriminant_conductor_q, &l);
+    pf.compose(&pf).reduce().pow(q).reduce()
 }
 
 #[test]
@@ -368,7 +369,10 @@ fn test_encrypt_decrypt_identity() {
     let (public_key, private_key) = instance.keygen(&mut rng);
 
     println!("generated keys = pk={:?} sk={}", public_key, private_key);
-    let cleartext = rug::Integer::from(13344545); // Sample cleartext
+    let rd = blstrs::Scalar::random(&mut OsRng);
+    println!("rd={:?}", rd);
+    let cleartext = blstrs::Scalar::to_z(&rd); // Sample cleartext
+    println!("cleartext={:?}", cleartext);
     let ciphertext: (BQF<Integer>, BQF<Integer>) =
         instance.encrypt(&public_key, &cleartext, &mut rng);
 
@@ -382,4 +386,25 @@ fn test_encrypt_decrypt_identity() {
         decrypted, cleartext,
         "Decrypted text does not match the original cleartext"
     );
+
+    let pk_sk: Vec<(BQF<Integer>, Integer)> = (1..10).map(|_| instance.keygen(&mut rng)).collect();
+    let public_keys = pk_sk.iter().map(|(k, _)| k.clone()).collect();
+    let private_keys: Vec<Integer> = pk_sk.iter().map(|(_, s)| s.clone()).collect();
+    let cleartexts = (1..10).map(|_| blstrs::Scalar::to_z(&rd)).collect(); // Sample cleartext
+    println!("cleartext={:?}", cleartext);
+    let (common, ciphertexts, _) = instance.encrypt_batch(&public_keys, &cleartexts, &mut rng);
+
+    println!("generated ciphertexts {:?}", ciphertexts);
+
+    println!("before decrypt");
+
+    for i in 0..9 {
+        let decrypted =
+            instance.decrypt(&private_keys[i], &(common.clone(), ciphertexts[i].clone()));
+
+        assert_eq!(
+            decrypted, cleartext,
+            "Decrypted text does not match the original cleartext"
+        );
+    }
 }

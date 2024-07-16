@@ -416,11 +416,11 @@ impl Z for Bignum4096 {
         todo!()
     }
 
-    fn from_bytes(b: Vec<u8>) -> Self {
+    fn from_bytes_be(b: Vec<u8>) -> Self {
         todo!()
     }
 
-    fn to_bytes(&self) -> Vec<u8> {
+    fn to_bytes_be(&self) -> Vec<u8> {
         todo!()
     }
 
@@ -475,10 +475,6 @@ impl Z for Bignum4096 {
     }
 
     fn from_string(s: &str, base: u64) -> Self {
-        todo!()
-    }
-
-    fn from_bytes_be(_: Vec<u8>) -> Self {
         todo!()
     }
 }

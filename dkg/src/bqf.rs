@@ -6,7 +6,6 @@ use std::fmt::Debug;
 use rand_core::CryptoRng;
 use serde::Serialize;
 
-use crate::cl_hsmq::KernelError;
 use crate::z::{self};
 
 pub trait BinaryQuadraticForm<Z>
@@ -130,15 +129,17 @@ where
     // See https://gite.lirmm.fr/crypto/bicycl/-/blob/master/src/bicycl/qfi.inl?ref_type=heads#L1162
     // https://github.com/jtcoolen/GLV_arkworks/blob/main/src/lib.rs#L84
     // https://github.com/jtcoolen/asymmetric_crypto/blob/master/elliptic_curves/ec_elgamal_codage_decodage.gp#L100
+    // TODO does not work with negative exponent
     fn pow(&self, exponent: &Z) -> Self
     where
         Self: Sized + Clone,
     {
         // naive double and add
+        let mut res = self.identity();
         let n = exponent.bit_size();
-        let mut res = self.reduce();
-        for i in (0..=n).rev() {
-            res = res.double();
+
+        for i in (0..n).rev() {
+            res = res.compose(&res); // TODO what about using double after checking that the disc is neg of prime?
             if exponent.get_bit(i) {
                 res = self.compose(&res);
             }
@@ -168,7 +169,7 @@ where
     fn prime_to(&self, l: &Z) -> Self;
     fn to_maximal_order(&self, l: &Z, DeltaK: &Z) -> BQF<Z>;
 
-    fn kernel_representative(&self, l: &Z, DeltaK: &Z) -> Result<Z, KernelError>;
+    fn kernel_representative(&self, l: &Z, DeltaK: &Z) -> Z;
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -319,9 +320,9 @@ impl<Z: z::Z + std::fmt::Debug + std::clone::Clone> BinaryQuadraticForm<Z> for B
     fn to_bytes(&self) -> Vec<u8> {
         // Convert each field to bytes
         let mut bytes = Vec::new();
-        bytes.extend_from_slice(&self.a.to_bytes());
-        bytes.extend_from_slice(&self.b.to_bytes());
-        bytes.extend_from_slice(&self.c.to_bytes());
+        bytes.extend_from_slice(&self.a.to_bytes_be());
+        bytes.extend_from_slice(&self.b.to_bytes_be());
+        bytes.extend_from_slice(&self.c.to_bytes_be());
         bytes
     }
 
@@ -368,7 +369,7 @@ impl<Z: z::Z + std::fmt::Debug + std::clone::Clone> BinaryQuadraticForm<Z> for B
         BQF::new_with_discriminant(&new_self.a(), &b, DeltaK)
     }
 
-    fn kernel_representative(&self, l: &Z, DeltaK: &Z) -> Result<Z, KernelError> {
+    fn kernel_representative(&self, l: &Z, DeltaK: &Z) -> Z {
         let mut tmp0 = Z::default();
         let mut g0 = Z::from(1u64);
         let mut g1 = Z::from(0u64);
@@ -388,7 +389,7 @@ impl<Z: z::Z + std::fmt::Debug + std::clone::Clone> BinaryQuadraticForm<Z> for B
         }
 
         if !ft.a().eq(&Z::from(1u64)) || !ft.b().eq(&Z::from(1u64)) {
-            return Err(KernelError::NotInKernel);
+            panic!("The form is not in the kernel")
         }
 
         let tmp1 = g0.gcd(&g1);
@@ -399,7 +400,7 @@ impl<Z: z::Z + std::fmt::Debug + std::clone::Clone> BinaryQuadraticForm<Z> for B
         g1 = g1.neg();
         tmp0 = tmp0.mul_mod(&g1, l);
 
-        Ok(tmp0)
+        tmp0
     }
     // TODO (harder): implement compose, double, pow
     // reverse-engineer their implementation

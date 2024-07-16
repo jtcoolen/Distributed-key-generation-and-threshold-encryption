@@ -1,17 +1,24 @@
+// SPDX-FileCopyrightText: 2024 Nomadic Labs <contact@nomadic-labs.com>
+//
+// SPDX-License-Identifier: MIT
+
 use core::cmp::Ordering;
 use std::cmp::Ordering::Less;
 use std::ops::AddAssign;
 
-use rug::integer::IntegerExt64;
+use rug::integer::{IntegerExt64, Order};
 use rug::ops::DivRounding;
 use rug::ops::NegAssign;
 use rug::Complete;
 use rug::Integer;
+use serde::Serializer;
 
 use crate::z::EuclideanDivResult;
 
-// special compilation suite for wasm with emscripten
-// see https://github.com/cryspen/libcrux/blob/0f74f5a6fa7477e5dd553d6d589ab04c6fcca2bd/sys/hacl/wasm.sh
+// TODO provide backend for wasm execution mode
+// https://github.com/RustCrypto/crypto-bigint (got an audit from NCC with no significant findings)
+// https://github.com/mhogrefe/malachite, https://github.com/tczajka/ibig-rs or https://github.com/cmpute/dashu/tree/master
+// malachite seems faster according to this benchmark https://github.com/tczajka/bigint-benchmark-rs
 
 impl crate::z::Z for rug::Integer {
     fn zero() -> Self {
@@ -26,17 +33,23 @@ impl crate::z::Z for rug::Integer {
         <Self as From<u64>>::from(n)
     }
 
-    fn from_bytes(b: Vec<u8>) -> Self {
-        Integer::from_digits(&b, rug::integer::Order::Lsf)
+    fn from_bytes_be(b: Vec<u8>) -> Self {
+        Integer::from_digits(&b, rug::integer::Order::Msf)
     }
 
-    fn to_bytes(&self) -> Vec<u8> {
-        Integer::to_digits::<u8>(self, rug::integer::Order::Lsf)
+    fn to_bytes_be(&self) -> Vec<u8> {
+        Integer::to_digits::<u8>(self, rug::integer::Order::Msf)
     }
 
-    fn random<R: rand_core::CryptoRng + rand_core::RngCore>(_rng: &mut R) -> Self {
-        let mut rand = rug::rand::RandState::new();
-        Integer::random_bits(4096, &mut rand).into()
+    fn random<R: rand_core::CryptoRng + rand_core::RngCore>(rng: &mut R) -> Self {
+        // TODO check that's ok to limit ourselves to 8096 bits here
+        let mut limbs = [0u64; 128];
+        let mut dest = [0u8; 8 * 64];
+        rng.fill_bytes(&mut dest);
+        for (i, chunk) in dest.chunks_exact(8).enumerate() {
+            limbs[i] = u64::from_le_bytes(chunk.try_into().expect("Chunk size is not 8"));
+        }
+        Integer::from_digits(&limbs, Order::Msf)
     }
 
     fn eq_abs(&self, rhs: &Self) -> bool {
@@ -308,9 +321,5 @@ impl crate::z::Z for rug::Integer {
 
     fn from_string(s: &str, base: u64) -> Self {
         Integer::from_str_radix(s, base as i32).unwrap()
-    }
-
-    fn from_bytes_be(b: Vec<u8>) -> Self {
-        Integer::from_bytes(b)
     }
 }

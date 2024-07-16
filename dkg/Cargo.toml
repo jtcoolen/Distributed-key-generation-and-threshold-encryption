@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 blstrs = "0.7.1"
+blst = "0.3.12"
 proptest = "1.4.0"
 criterion = "0.5.1"
 serde = {version =  "1.0.203" , features = ["std", "serde_derive", "derive"]}
@@ -16,7 +17,7 @@ getrandom = { version = "0.2.15", features = ["js"] }
 rand_core = "0.6.4"
 rand = "0.6.4"
 gmp-mpfr-sys = "1.6.4"
-rug = "1.24.1"
+rug = {version="1.24.1", features=["serde"]}
 blake3 = "1.5.1"
 thiserror = "1.0.61"
 group = "0.13.0"

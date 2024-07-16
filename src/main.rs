@@ -43,6 +43,7 @@ fn nizk_dlog_prove(base: &BinaryQF, h: &BinaryQF, log: &BigInt, bound: &BigInt) 
     let r = BigInt::sample_range(&BigInt::one(), bound);
     let a = base.exp(&r);
     let c = nizk_dlog_challenge(base, h, &a);
+    println!("c={:?}", c);
     let s = r + log * &c;
     NizkDlogProof {
         public_coin: c,
@@ -57,6 +58,7 @@ fn nizk_dlog_verify(proof: NizkDlogProof, base: &BinaryQF, h: &BinaryQF, bound: 
     let b = h.exp(&proof.public_coin).inverse();
     let a = base.exp(&proof.blinded_log).compose(&b).reduce();
     let c = nizk_dlog_challenge(base, h, &a);
+    println!("c={:?}", c);
     c.eq(&proof.public_coin)
 }
 
@@ -85,7 +87,7 @@ fn main() {
  println!("pf={:?}, disc={:?}", group, group.discriminant());
 
 
-    let bound = BigInt::from_str_radix("134731066417946855817371727982960102805371574927252724399119343247182932538452304549609704350360058405827948976558722087559341859252338031258062288910984654814255199874816496621961922792890687089794760104660404141195904459619180668507135317125790028783030121033883873501532619563806411495141846196437", 10).unwrap();
+    let bound = BigInt::from_str_radix("1000", 10).unwrap();
     let log = BigInt::sample_range(&BigInt::from_bytes(&[1u8]), &bound);
 
     let base = group.clone();

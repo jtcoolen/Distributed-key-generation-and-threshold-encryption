@@ -432,6 +432,7 @@ dependencies = [
  "bicycl",
  "bincode",
  "blake3",
+ "blst",
  "blstrs",
  "bytemuck",
  "criterion",
@@ -1223,6 +1224,7 @@ dependencies = [
  "gmp-mpfr-sys",
  "libc",
  "libm",
+ "serde",
 ]
 
 [[package]]

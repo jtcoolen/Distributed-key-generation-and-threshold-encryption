@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2024 Nomadic Labs <contact@nomadic-labs.com>
+//
+// SPDX-License-Identifier: MIT
+
 use std::cmp::Ordering;
 
 use rand_core::CryptoRng;
@@ -23,9 +27,9 @@ pub trait Z {
 
     fn from_i64(i: i64) -> Self;
 
-    fn from_bytes(b: Vec<u8>) -> Self;
+    fn from_bytes_be(b: Vec<u8>) -> Self;
 
-    fn to_bytes(&self) -> Vec<u8>;
+    fn to_bytes_be(&self) -> Vec<u8>;
 
     fn random<R: CryptoRng + rand_core::RngCore>(rng: &mut R) -> Self;
 
@@ -154,6 +158,4 @@ pub trait Z {
     fn abs(&self) -> Self;
 
     fn pow_mod(&self, exponent: &Self, modulo: &Self) -> Self;
-
-    fn from_bytes_be(_: Vec<u8>) -> Self;
 }
