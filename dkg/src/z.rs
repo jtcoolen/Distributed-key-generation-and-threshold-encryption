@@ -155,5 +155,5 @@ pub trait Z {
 
     fn pow_mod(&self, exponent: &Self, modulo: &Self) -> Self;
 
-    fn to_bytes_be(_: Vec<u8>) -> Self;
+    fn from_bytes_be(_: Vec<u8>) -> Self;
 }

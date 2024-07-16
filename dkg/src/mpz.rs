@@ -310,7 +310,7 @@ impl crate::z::Z for rug::Integer {
         Integer::from_str_radix(s, base as i32).unwrap()
     }
 
-    fn to_bytes_be(b: Vec<u8>) -> Self {
+    fn from_bytes_be(b: Vec<u8>) -> Self {
         Integer::from_bytes(b)
     }
 }

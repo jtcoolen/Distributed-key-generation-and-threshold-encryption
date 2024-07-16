@@ -55,7 +55,7 @@ pub trait ClHSMq<Z: crate::z::Z + std::fmt::Debug + Clone, BQF: BinaryQuadraticF
 
     fn encrypt_batch<Rng: CryptoRng + rand_core::RngCore>(
         &self,
-        public_key: &BQF,
+        public_keys: &Vec<BQF>,
         cleartexts: &Vec<Z>,
         rng: &mut Rng,
     ) -> (BQF, Vec<BQF>);
@@ -201,19 +201,19 @@ where
 
     fn encrypt_batch<Rng: CryptoRng + rand_core::RngCore>(
         &self,
-        public_key: &BQF,
+        public_keys: &Vec<BQF>,
         cleartexts: &Vec<Z>,
         rng: &mut Rng,
     ) -> (BQF, Vec<BQF>) {
         let r = Z::sample_range(rng, &Z::from(0), &self.class_number_H_bound);
         let c1 = self.generator_H.pow(&r).reduce();
-        let pk_r = public_key.pow(&r).reduce();
 
         let c2s = cleartexts
             .iter()
-            .map(|c| {
+            .zip(public_keys)
+            .map(|(c, k)| {
                 power_f(&self.generator_F, &self.discriminant, &self.q, &c)
-                    .compose(&pk_r)
+                    .compose(&k.pow(&r).reduce())
                     .reduce()
             })
             .collect();

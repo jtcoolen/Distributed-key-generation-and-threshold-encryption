@@ -1,6 +1,5 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
-use std::ops::Add;
 
 use ff::{Field, PrimeField};
 use rand_core::{CryptoRng, RngCore};
@@ -121,26 +120,13 @@ where
     }
 }
 
-/*fn hash() {
-    let mut hasher = blake3::Hasher::new();
-    hasher.update(base.to_bytes().as_slice());
-    hasher.update(h.to_bytes().as_slice());
-    hasher.update(a.to_bytes().as_slice());
-    let hash = hasher.finalize();
-    BigInt::from_bytes(hash.as_bytes())
-}*/
-
 pub trait NIZKProofOfCorrectSharing<Z, BQF, E, S>
 where
     Z: crate::z::Z + std::fmt::Debug + Clone,
-    BQF: BinaryQuadraticForm<Z> + Clone,
-    E: EllipticCurve<S>,
-    S: Scalar,
+    BQF: BinaryQuadraticForm<Z> + Clone + Debug,
+    E: EllipticCurve<S> + Clone,
+    S: Scalar + Clone,
 {
-    type Instance;
-    type Proof;
-    type Witness;
-
     /// Creates a new instance with the given threshold.
     /// Since the threshold is small, FFT is not required.
     fn new<R: CryptoRng + RngCore>(
@@ -154,13 +140,13 @@ where
     /// Generates a proof for the given instance and witness.
     fn prove<R: CryptoRng + RngCore>(
         &self,
-        instance: &Self::Instance,
-        witness: &Self::Witness,
+        instance: &Instance<Z, BQF, E, S>,
+        witness: &Witness<Z, S>,
         rng: &mut R,
-    ) -> Self::Proof;
+    ) -> Proof<Z, BQF, E, S>;
 
     /// Verifies the given proof against the provided instance.
-    fn verify(&self, instance: &Self::Instance, proof: &Self::Proof) -> bool;
+    fn verify(&self, instance: &Instance<Z, BQF, E, S>, proof: &Proof<Z, BQF, E, S>) -> bool;
 }
 
 struct Witness<Z, S>
@@ -254,10 +240,6 @@ where
     E: EllipticCurve<S, Scalar = S> + std::clone::Clone,
     S: Scalar + Clone,
 {
-    type Instance = Instance<Z, BQF, E, S>;
-    type Proof = Proof<Z, BQF, E, S>;
-    type Witness = Witness<Z, S>;
-
     fn new<R: CryptoRng + RngCore>(
         n: u32,
         threshold: u32,
@@ -270,10 +252,10 @@ where
 
     fn prove<R: CryptoRng + RngCore>(
         &self,
-        instance: &Self::Instance,
-        witness: &Self::Witness,
+        instance: &Instance<Z, BQF, E, S>,
+        witness: &Witness<Z, S>,
         rng: &mut R,
-    ) -> Self::Proof {
+    ) -> Proof<Z, BQF, E, S> {
         let alpha = S::random(rng);
         let rho = Z::sample_range(rng, &Z::zero(), &S::modulus_as_z()); // TODO correct range
         let w = self.generator_H.pow(&rho);
@@ -323,7 +305,7 @@ where
         Proof { w, x, y, z_r, z_s }
     }
 
-    fn verify(&self, instance: &Self::Instance, proof: &Self::Proof) -> bool {
+    fn verify(&self, instance: &Instance<Z, BQF, E, S>, proof: &Proof<Z, BQF, E, S>) -> bool {
         let mut hasher = blake3::Hasher::new();
         hasher.update(bincode::serialize(&instance).unwrap().as_slice());
         let mut gamma = hasher.finalize().as_bytes().to_vec();
@@ -409,48 +391,158 @@ where
     }
 }
 
-pub trait VerifiableSecretSharingPrimitives<LinearHomomorphicEncryption, Z, BQF>
+pub trait Polynomial<S>
+where
+    S: Scalar,
+{
+    type Scalar;
+    fn random<R: RngCore + CryptoRng>(rng: &mut R, degree: usize) -> Self;
+
+    fn set_coefficient(&mut self, index: usize, scalar: &Self::Scalar);
+
+    fn evaluate(&self, point: &Self::Scalar) -> Self::Scalar;
+
+    fn coefficients(&self) -> Vec<Self::Scalar>;
+}
+
+impl<S> Polynomial<S> for Vec<blstrs::Scalar>
+where
+    S: Scalar,
+{
+    type Scalar = blstrs::Scalar;
+
+    fn random<R: RngCore + CryptoRng>(rng: &mut R, degree: usize) -> Self {
+        //vec![<blstrs::Scalar as Field>::random(rng); degree + 1]
+        (0..=degree).map(|_| Scalar::random(rng)).collect()
+    }
+
+    fn set_coefficient(&mut self, index: usize, scalar: &Self::Scalar) {
+        self[index] = *scalar
+    }
+
+    fn evaluate(&self, point: &Self::Scalar) -> Self::Scalar {
+        // with Horner's method
+        let mut result = Scalar::zero();
+        for coef in self.iter().rev() {
+            result = result * point + coef;
+        }
+        result
+    }
+
+    fn coefficients(&self) -> Vec<Self::Scalar> {
+        self.clone()
+    }
+}
+
+pub trait VerifiableSecretSharingPrimitives<LinearHomomorphicEncryption, Z, S, P, E, BQF, PoCS>
 where
     LinearHomomorphicEncryption: ClHSMq<Z, BQF>,
     Z: crate::z::Z + std::fmt::Debug + Clone,
-    BQF: BinaryQuadraticForm<Z> + Clone,
+    BQF: BinaryQuadraticForm<Z> + Clone + Debug,
+    E: EllipticCurve<S, Scalar = S> + Clone,
+    S: Scalar + Clone,
+    P: Polynomial<S, Scalar = S>,
+    PoCS: NIZKProofOfCorrectSharing<Z, BQF, E, S>,
 {
-    type PublicParams;
-    type Instance;
-    type ProofOfCorrectSharing;
-    type Share;
-    type Commitment;
-    type Ciphertext;
-    type PublicKey;
-    type SecretKey;
+    fn share<R: RngCore + CryptoRng>(
+        rng: &mut R,
+        n: usize,
+        threshold: usize,
+        s: &S,
+    ) -> (Vec<S>, Vec<E>) {
+        let mut p = P::random(rng, threshold);
+        p.set_coefficient(0, s);
+        let s_i = (1..=n).map(|x| p.evaluate(&S::from(x as u64))).collect();
+        let cmt = p
+            .coefficients()
+            .iter()
+            .take(threshold + 1)
+            .map(|c| {
+                let mut g = E::generator();
+                g.mul_assign(c);
+                g
+            })
+            .collect();
+        (s_i, cmt)
+    }
 
-    fn share(pp: &Self::PublicParams, s: Z) -> (Vec<Self::Share>, Self::Commitment);
+    fn encrypt<R: RngCore + CryptoRng>(
+        rng: &mut R,
+        enc_scheme: &LinearHomomorphicEncryption,
+        proof_of_correct_sharing: &PoCS,
+        cmt: &Vec<E>,
+        shares: &Vec<S>,
+        pub_keys: &Vec<BQF>,
+    ) -> (BQF, Vec<BQF>, Proof<Z, BQF, E, S>) {
+        // compute class number bound
+        let r = Z::random(rng);
+        let (common, encryptions) = enc_scheme.encrypt_batch(
+            pub_keys,
+            &shares.iter().map(|s| s.to_z()).collect::<Vec<Z>>(),
+            rng,
+        );
+        let instance = Instance {
+            public_keys: pub_keys.clone(),
+            ciphertexts_common: common.clone(),
+            ciphertexts: encryptions.clone(),
+            polynomial_coefficients_commitments: cmt.clone(),
+            _scalar_type: Default::default(),
+            _int_type: Default::default(),
+        };
+        let witness = Witness {
+            s: shares.clone(),
+            r,
+        };
+        let proof: Proof<Z, BQF, E, S> = proof_of_correct_sharing.prove(&instance, &witness, rng);
 
-    fn encrypt(
-        pp: &Self::PublicParams,
-        cmt: &Self::Commitment,
-        shares: Vec<Self::Share>,
-        pub_keys: Vec<Self::PublicKey>,
-    ) -> (
-        Self::Ciphertext,
-        Vec<Self::Ciphertext>,
-        Self::ProofOfCorrectSharing,
-    );
+        (common, encryptions, proof)
+    }
 
     fn verify(
-        pp: &Self::PublicParams,
-        cmt: &Self::Commitment,
-        ciphertext: &Self::Ciphertext,
-        enc_shares: Vec<Self::Ciphertext>,
-        pub_keys: Vec<Self::PublicKey>,
-        proof: &Self::ProofOfCorrectSharing,
-    ) -> bool;
+        proof_of_correct_sharing: &PoCS,
+        cmt: &Vec<E>,
+        common_enc: &BQF,
+        enc_shares: &Vec<BQF>,
+        pub_keys: &Vec<BQF>,
+        proof: &Proof<Z, BQF, E, S>,
+    ) -> bool {
+        let instance = Instance {
+            public_keys: pub_keys.clone(),
+            ciphertexts_common: common_enc.clone(),
+            ciphertexts: enc_shares.clone(),
+            polynomial_coefficients_commitments: cmt.clone(),
+            _scalar_type: Default::default(),
+            _int_type: Default::default(),
+        };
+        proof_of_correct_sharing.verify(&instance, &proof)
+    }
 
     fn decrypt(
-        pp: &Self::PublicParams,
-        sk: &Self::SecretKey,
-        enc_share: &Self::Ciphertext,
-    ) -> Self::Share;
+        enc_scheme: &LinearHomomorphicEncryption,
+        sk: &Z,
+        common_enc: &BQF,
+        enc_share: &BQF,
+    ) -> S {
+        S::from_bytes(Z::to_bytes(
+            &enc_scheme.decrypt(sk, &(common_enc.clone(), enc_share.clone())),
+        ))
+    }
 
-    fn verify_commitment(cmt: &Self::Commitment, i: usize, share: &Self::Share) -> bool;
+    fn verify_commitment(cmt: &Vec<E>, share_index: usize, share: &S) -> bool {
+        let mut lhs = E::generator();
+        lhs.mul_assign(share);
+
+        let (_, rhs) = cmt
+            .clone()
+            .into_iter()
+            .enumerate()
+            .reduce(|(_, acc), (j, mut a_j)| {
+                a_j.mul_assign(&S::from(share_index.pow(j as u32) as u64));
+                a_j.add_assign(&acc);
+                (j, a_j)
+            })
+            .unwrap();
+
+        lhs.equals(&rhs)
+    }
 }

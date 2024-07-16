@@ -478,7 +478,7 @@ impl Z for Bignum4096 {
         todo!()
     }
 
-    fn to_bytes_be(_: Vec<u8>) -> Self {
+    fn from_bytes_be(_: Vec<u8>) -> Self {
         todo!()
     }
 }
