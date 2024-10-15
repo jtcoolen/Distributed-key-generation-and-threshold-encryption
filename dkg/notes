@@ -1,2 +1,0 @@
-generate flamegraphs:
-CARGO_PROFILE_RELEASE_DEBUG=true cargo flamegraph --root  --dev --unit-test -- "test_encrypt_decrypt_identity"

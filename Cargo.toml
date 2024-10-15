@@ -1,13 +1,34 @@
-[package]
-name = "ideal_class_group_crypto"
+# SPDX-FileCopyrightText: 2024 TriliTech <contact@trili.tech>
+#
+# SPDX-License-Identifier: MIT
+
+[workspace]
+resolver = "2"
+members = [
+    "crates/threshold_encryption",
+    "crates/distributed_key_generation"
+]
+
+[workspace.package]
 version = "0.1.0"
+license = "MIT"
+authors = ["TriliTech <contact@trili.tech>"]
 edition = "2021"
 
-[dependencies]
-class_group = {git="https://github.com/ZenGo-X/class.git"}
-blstrs = "0.7.1"
+# TODO: More fine grained dependencies for each crate
+[workspace.dependencies]
+async-trait = "0.1.61"
+anyhow = "1.0.82"
+bytes = "1.6.0"
+itertools = "0.12.1"
+hex = { version = "0.4.3", features = ["serde"] }
+serde = { version = "1.0.203", features = ["derive"] }
+serde_json = "1.0.116"
+thiserror = "1.0.58"
+
+#class_group = {git="https://github.com/ZenGo-X/class.git"}
 proptest = "1.4.0"
-classgroup = {git="https://github.com/hsaleemsupra/cgdkg_artifact.git"}
+#classgroup = {git="https://github.com/hsaleemsupra/cgdkg_artifact.git"}
 getrandom = "0.2.15"
 ark-bls12-381 = "0.4.0"
 rug = "1.24.1"
@@ -19,4 +40,30 @@ num-traits = "0.2.19"
 num-bigint = "0.4.5"
 curv-kzen = "0.10.0"
 libcrux = "0.0.2-pre.2"
-serde = "1.0.203"
+
+
+# EVM types
+# Encoding
+rlp = { version = "0.5.2", features = ["derive"] }
+#bcs = "0.1.4"
+
+# Crypto
+sha3 = { version = "0.10.6", default-features = false }
+chacha20 = "0.8.1" # FIXME: new version has breaking API changes
+libsecp256k1 = { version = "0.7", default-features = false, features = [
+  "static-context",
+  "hmac",
+] }
+blstrs = { version = "0.7.1", features = ["portable"] }
+blst = "0.3.13"
+zeroize = "1.5.7"
+ff = "0.13.0"
+pairing_lib = { version = "0.23", package = "pairing" }
+rand = "0.8"
+
+# Project
+threshold-encryption = { path = "crates/threshold_encryption" }
+distributed_key_generation = { path = "crates/distributed_key_generation" }
+
+# EVM types
+primitive-types = { version = "0.12.1", default-features = false, features = ["serde", "rlp"] }
