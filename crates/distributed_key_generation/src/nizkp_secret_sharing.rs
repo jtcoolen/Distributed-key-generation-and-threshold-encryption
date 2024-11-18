@@ -4,6 +4,7 @@
 
 use std::fmt::Debug;
 use std::marker::PhantomData;
+use std::time::Instant;
 
 #[cfg(feature = "random")]
 use crate::z::Randomizable;
@@ -445,6 +446,7 @@ pub(crate) fn verify<
     instance: &Instance<Z, E, S>,
     proof: &Proof<Z, E, S>,
 ) -> bool {
+    let now = Instant::now();
     // Convert instance to Bignum
     let instance_bn = convert_instance_to_bignum(instance);
 
@@ -455,7 +457,9 @@ pub(crate) fn verify<
     // Compute gamma_prime
     let gamma_prime_s = compute_gamma_prime_s(&gamma_z, &proof.w, &proof.x, &proof.y);
     let gamma_prime_z = S::to_z(&gamma_prime_s);
+    println!("challenge {:?}", now.elapsed());
 
+    let now = Instant::now();
     // Verify first equation: w * instance.ciphertexts_common^gamma_prime_z == generator_h^z_r
     let lhs = proof
         .w
@@ -464,7 +468,9 @@ pub(crate) fn verify<
     if !lhs.equals(&rhs) {
         return false;
     }
+    println!("first check {:?}", now.elapsed());
 
+    let now = Instant::now();
     // Verify second equation: multiexp(instance.polynomial_coefficients_commitments, scalars) * gamma_prime_s + x == generator * z_s
     let scalars = compute_scalars(config, instance, &gamma_s);
     let mut lhs = E::multiexp(&instance.polynomial_coefficients_commitments, &scalars);
@@ -476,15 +482,19 @@ pub(crate) fn verify<
     if !lhs.equals(&rhs) {
         return false;
     }
+    println!("second check {:?}", now.elapsed());
 
+    let now = Instant::now();
     // Verify third equation: multiexp(instance.ciphertexts, points)^gamma_prime_z * proof.y == multiexp(instance.public_keys, points)^proof.z_r * f^z_s
     let points = compute_gamma_powers(config.n as usize, &gamma_z);
-
+    
     let lhs = BQF::multiexp(&instance.ciphertexts, &points)
         .pow(&gamma_prime_z)
         .compose(&proof.y.reduce());
 
+        
     let mut rhs = BQF::multiexp(&instance.public_keys, &points);
+
     let f_pow = power_f(
         &config.generator_f,
         &config.discriminant,
@@ -493,7 +503,11 @@ pub(crate) fn verify<
     );
     rhs = rhs.pow(&proof.z_r).compose(&f_pow);
 
-    lhs.equals(&rhs)
+    let res = lhs.equals(&rhs);
+  
+    println!("third check {:?}", now.elapsed());
+    
+    res
 }
 
 fn compute_scalars<Z, S, E>(config: &Config<Z>, instance: &Instance<Z, E, S>, gamma_s: &S) -> Vec<S>

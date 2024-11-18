@@ -30,7 +30,7 @@ llvmPackages.libcxxStdenv.mkDerivation {
   NIX_LDFLAGS =
     # Work around https://github.com/NixOS/nixpkgs/issues/166205.
     lib.optionalString (stdenv.cc.isClang && stdenv.cc.libcxx != null)
-    " -l${stdenv.cc.libcxx.cxxabi.libName} -lc -lm";
+    " -l${stdenv.cc.libcxx.cxxabi.libName} -lc -lm -lgmp /opt/homebrew/lib/libgmp.dylib /opt/homebrew/lib/libgmpxx.dylib /opt/homebrew/include/gmp.h";
 
   shellHook = ''
     export NIX_LDFLAGS="-F${pkgs.darwin.apple_sdk.frameworks.CoreFoundation}/Library/Frameworks -framework CoreFoundation $NIX_LDFLAGS";

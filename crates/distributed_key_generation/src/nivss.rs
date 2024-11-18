@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 use std::fmt::Debug;
+use std::time::Instant;
 
 #[cfg(feature = "random")]
 use rand_core::{CryptoRng, RngCore};
@@ -35,7 +36,6 @@ pub fn share<
     let p_len = p.coefficients().len();
     assert_eq!(p_len, threshold + 1);
     p.set_coefficient(0, s);
-    println!("PPP={:?}, s={:?}", p, s);
     let s_i = (1..=n).map(|i| p.evaluate(&S::from(i as u64))).collect();
     let cmt: Vec<E> = p
         .coefficients()
@@ -50,7 +50,6 @@ pub fn share<
     for (p, c) in p.coefficients().iter().zip(&cmt) {
         let mut e = E::generator().clone();
         e.mul_assign(p);
-        println!("p={:?}, c={:?}", c, e);
     }
     (s_i, cmt, p)
 }
@@ -300,20 +299,27 @@ pub fn verify_dealing_output_secret_key_share<
     public_keys: &[BQF<Z>],
     dealing: &Dealing<E, S, Z, P>,
 ) -> Option<S> {
+    let now = Instant::now();
     if !verify_dealing::<Z, E, S, P>(pp, public_keys, dealing) {
         return None;
     }
+    println!("verify dealing {:?}", now.elapsed());
 
+    let now = Instant::now();
     let s = decrypt::<Z, E, S, P>(
         &pp.encryption_scheme,
         secret_key,
         &dealing.common_encryption,
         &dealing.encryptions[index],
     );
+    println!("decrypt for dealing {:?}", now.elapsed());
 
+    let now = Instant::now();
     if !verify_commitment::<Z, E, S, P>(&dealing.cmt, index, &s) {
         return None;
     }
+    println!("verify comm for dealing {:?}", now.elapsed());
+
 
     Some(s)
 }

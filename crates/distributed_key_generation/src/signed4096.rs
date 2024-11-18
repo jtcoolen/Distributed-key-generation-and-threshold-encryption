@@ -22,6 +22,7 @@ pub struct Bignum {
     pub uint: U4096,
 }
 
+
 impl PartialEq for Bignum {
     fn eq(&self, other: &Self) -> bool {
         (self.uint.eq(&other.uint)) && (self.positive == other.positive)
@@ -71,6 +72,16 @@ impl crate::z::Z for Bignum {
             positive: true,
             uint: U4096::ZERO,
         }
+    }
+
+    fn from_digits<T>(digits: &[T], order: rug::integer::Order) -> Self
+        where
+            T: rug::integer::UnsignedPrimitive {
+        panic!("not impl")
+    }
+    
+    fn to_string(&self) -> String {
+        "".to_string()
     }
 
     fn default() -> Self {

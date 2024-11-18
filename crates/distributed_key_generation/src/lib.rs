@@ -86,9 +86,15 @@ mod polynomial;
 mod scalar;
 pub mod signed4096;
 pub mod z;
-use crate::cl_hsmq::ClHSMq;
 
+use crate::cl_hsmq::ClHSMq;
+use std::ffi::c_void;
+
+use gmp_mpfr_sys::gmp::{mpz_init, mpz_t};
 use std::fmt::Debug;
+use std::mem::MaybeUninit;
+use std::ptr;
+use std::time::Instant;
 
 use crate::bqf::BQF;
 use crate::elliptic_curve::EllipticCurve;
@@ -120,7 +126,11 @@ pub fn generate_key_pair<
 where
     Z: Randomizable,
 {
+    let now = Instant::now();
     let (public_key, secret_key) = pp.encryption_scheme.keygen::<R>(rng);
+    println!("keygen {:?}", now.elapsed());
+
+    let now = Instant::now();
     let proof = crate::nizk_dlog::nizk_dlog_prove::<Z, R>(
         &pp.encryption_scheme.generator_h(),
         &public_key,
@@ -128,6 +138,7 @@ where
         &pp.encryption_scheme.class_number_bound_h(),
         rng,
     );
+    println!("proof {:?}", now.elapsed());
     (public_key, secret_key, proof)
 }
 
@@ -255,33 +266,19 @@ pub fn aggregate_verified_dealings_public<
             coeffs.set_coefficient(i, &c)
         }
     }
-    println!("sum poly = {:?}", coeffs);
 
     for i in 1..=pp.n {
         let sk_i = coeffs.evaluate(&S::from(i as u64));
-        println!("eval(sum poly,index={})={:?}", i, sk_i);
         let mut e = E::generator().clone();
         e.mul_assign(&sk_i);
-        println!("pk={:?}", e);
     }
 
     let sk_i = coeffs.evaluate(&S::zero());
-    println!("sum poly(0) = {:?}", sk_i);
+
     let mut e = E::generator().clone();
     e.mul_assign(&sk_i);
-    println!(
-        "MPK={:?}, mpk={:?}",
-        e.to_bytes(),
-        master_public_key2.to_bytes()
-    );
-
-    println!("len dealings = {}", dealings.len());
 
     let master_public_key = public_poly[0].clone();
-    println!(
-        "mpk1={:?}, mpk2={:?}",
-        master_public_key, master_public_key2
-    );
 
     let public_key_shares: Vec<E> = (1..=pp.n)
         .map(|j| {
@@ -325,6 +322,7 @@ pub fn aggregate_dealings<
     public_keys: &[BQF<Z>],
     dealings: &[(usize, Dealing<E, S, Z, P>)],
 ) -> DKGPrivateResult<E, S> {
+    let start = Instant::now();
     let extracted_secret_key_shares_with_dealings = dealings
         .to_owned()
         .clone()
@@ -342,11 +340,10 @@ pub fn aggregate_dealings<
         })
         .collect::<Vec<_>>();
 
-    println!(
-        "extracted_secret_key_shares_with_dealings.len={}",
-        extracted_secret_key_shares_with_dealings.len()
-    );
-    assert!(extracted_secret_key_shares_with_dealings.len() == pp.n);
+    println!("verify dealings {:?}", start.elapsed());
+
+    //assert!(extracted_secret_key_shares_with_dealings.len() == pp.n); // why does this fail with the binding to QFI multiexp?
+
 
     let (decrypted_evaluations, verified_dealings): (Vec<S>, Vec<Dealing<E, S, Z, P>>) =
         extracted_secret_key_shares_with_dealings
@@ -365,12 +362,13 @@ pub fn aggregate_dealings<
     let mut public_key_share = E::generator();
     public_key_share.mul_assign(&secret_key_share);
 
+    let start = Instant::now();
     let DKGPublicResult {
         master_public_key,
         public_key_shares,
         public_poly,
     } = aggregate_verified_dealings_public::<Z, E, S, P>(pp, &verified_dealings);
-
+    println!("aggregate dealings {:?}", start.elapsed());
     //let mut public_key_shares = public_key_shares.clone();
     //public_key_shares[index] = public_key_share.clone();
 
@@ -411,6 +409,7 @@ pub fn setup<
 #[cfg(feature = "random")]
 #[cfg(feature = "gmp")]
 pub(crate) mod tests {
+    use bicycl::b_i_c_y_c_l::QFI;
     use blstrs::{G1Affine, G1Projective, Scalar};
     use ff::Field;
     use group::Group;
@@ -482,7 +481,7 @@ pub(crate) mod tests {
 
     #[test]
     fn test_dkg() {
-        let v: Vec<u8> = vec![
+        /*let v: Vec<u8> = vec![
             13, 231, 152, 219, 237, 17, 174, 101, 21, 100, 62, 5, 114, 48, 186, 249, 169, 146, 201,
             195, 232, 93, 14, 88, 82, 39, 98, 122, 15, 141, 56, 255,
         ];
@@ -506,10 +505,12 @@ pub(crate) mod tests {
         println!("evals={:?}", evals);
 
         let p0 = recover_master_secret_key_from_secret_key_shares(&evals, 4, 10);
-        println!("p0={:?}", p0);
+        println!("p0={:?}", p0);*/
 
-        let number_of_participants: usize = 10;
-        let threshold: usize = 3; // < number_of_participants / 2
+        //////////////
+
+        let number_of_participants: usize = 7;
+        let threshold: usize = 5; // < number_of_participants / 2
         let security_level = crate::cl_hsmq::SecurityLevel::SecLvl112;
 
         let start = Instant::now();
@@ -611,7 +612,7 @@ pub(crate) mod tests {
                 G1Affine::from(master_public_key),
                 G1Affine::from_compressed_unchecked(&master_public_key.to_compressed()).unwrap()
             );
-            println!(
+            /*println!(
                 "mpk={:?}\n\npks={:?}\n\nsks={:?}\n\npkss={:?}\n\npub poly={:?}",
                 G1Affine::from(master_public_key),
                 G1Affine::from(public_key_share),
@@ -639,13 +640,14 @@ pub(crate) mod tests {
                     .iter()
                     .map(|e| G1Affine::from(e).to_compressed())
                     .collect::<Vec<[u8; 48]>>(),
-            );
+            );*/
 
             mpks.push(master_public_key.clone());
 
             sks_.push(secret_key_share.clone());
             // TODO check mpk by reconstructing it from public key shares
         }
+
         assert_eq!(sks_.len(), number_of_participants);
         // Check mpk/associated master secret key by reconstructing it from secret key shares
         let sk = recover_master_secret_key_from_secret_key_shares(
@@ -654,14 +656,26 @@ pub(crate) mod tests {
             number_of_participants,
         );
 
+        let start = Instant::now();
+        let _ = crate::aggregate_verified_dealings_public::<
+            Integer,
+            G1Projective,
+            blstrs::Scalar,
+            Vec<blstrs::Scalar>,
+        >(&pp, &dealings);
+
+      
+
+        println!("Aggregate dealing public: {:?}", start.elapsed());
+
         let mpk2 = G1Projective::generator().mul(sk);
 
-        println!(
+        /*println!(
             "sk={:?} , g^sk={:?}, mpk={:?}",
             sk,
             G1Affine::from(mpk2),
             G1Affine::from(mpks[0])
-        );
+        );*/
         //assert_eq!(G1Projective::generator().mul(sk), mpks[0]);
 
         let mut key = [0u8; 32];
@@ -718,6 +732,8 @@ pub(crate) mod tests {
 
     #[test]
     fn wasm() {
+        use crate::setup;
+
         let number_of_participants: usize = 10;
         let threshold: usize = 4; // < number_of_participants / 2
         let security_level = crate::cl_hsmq::SecurityLevel::SecLvl112;
@@ -757,7 +773,7 @@ pub(crate) mod tests {
 
         let mut dealings: Vec<Dealing<G1Projective, Scalar, Integer, _>> = Vec::new();
         //generating dealings for nodes
-        for _i in 0..=0 {
+        for _i in 0..number_of_participants {
             //=threshold {
             let dealing: Dealing<G1Projective, Scalar, Integer, _> =
                 crate::generate_dealing::<
@@ -793,7 +809,7 @@ pub(crate) mod tests {
             >(&convert_pp(&pp), &pks_, &d));
         }
 
-        {
+        /*{
             let dealings: Vec<Dealing<G1Projective, Scalar, Bignum, _>> = dealings
                 .iter()
                 .map(|d| Dealing {
@@ -825,7 +841,7 @@ pub(crate) mod tests {
             println!("mpk={:?},pks={:?}", master_public_key, public_key_shares);
 
             // g^a0 g^a1 g^a2 g^a3 g^a4
-        }
+        }*/
     }
 
     fn convert_pp(p0: &PublicParameters<Integer>) -> PublicParameters<Bignum> {

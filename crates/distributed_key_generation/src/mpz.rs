@@ -13,7 +13,7 @@ use rand_core::{CryptoRng, RngCore};
 use rug::integer::{IntegerExt64, Order};
 use rug::ops::NegAssign;
 use rug::ops::{DivRoundingAssign, RemRoundingAssign};
-use rug::Complete;
+use rug::{Assign, Complete};
 pub use rug::Integer;
 
 use crate::z::{EuclideanDivResult, Z};
@@ -70,6 +70,16 @@ impl crate::z::Randomizable for rug::Integer {
 impl crate::z::Z for rug::Integer {
     fn zero() -> Self {
         <Self as From<u64>>::from(0u64)
+    }
+
+    fn from_digits<T>(digits: &[T], order: Order) -> Self
+        where
+            T: rug::integer::UnsignedPrimitive {
+        Integer::from_digits(digits, order)
+    }
+
+    fn to_string(&self) -> String {
+        Integer::to_string_radix(&self, 10)
     }
 
     fn default() -> Self {
@@ -177,6 +187,8 @@ impl crate::z::Z for rug::Integer {
     {
         self.extended_gcd_ref(other).complete()
     }
+
+
 
     fn divide_exact(&self, other: &Self) -> Self {
         self.div_exact_ref(other).complete()
@@ -411,3 +423,179 @@ impl crate::z::Z for rug::Integer {
         (self << n).complete()
     }
 }
+
+trait TruncXGC {
+    fn partial_euclid(
+        u00: &mut Integer,
+        u01: &mut Integer,
+        u10: &mut Integer,
+        u11: &mut Integer,
+        a: &mut Integer,
+        b: &mut Integer,
+        target_nlimb: usize,
+        t0: &mut Integer,
+        t1: &mut Integer,
+    );
+    fn highest_two_limbs(
+        ah: &mut Integer,
+        al: &mut Integer,
+        bh: &mut Integer,
+        bl: &mut Integer,
+        ap: &Integer,
+        bp: &Integer,
+        n: usize,
+    );
+    // Helper function to extract most significant bits of an Integer
+    fn leading_zeros(val: &Integer) -> usize;
+}
+
+/*impl TruncXGC for rug::Integer {
+
+    fn highest_two_limbs(
+        ah: &mut Integer,
+        al: &mut Integer,
+        bh: &mut Integer,
+        bl: &mut Integer,
+        ap: &Integer,
+        bp: &Integer,
+        n: usize,
+    ) {
+        let mask = ap.significant_bits().max(bp.significant_bits());
+
+        // If the most significant bit is set, no shift is needed
+        if mask >= Integer::u_bits() {
+            *ah = ap.clone();
+            *al = ap.clone() >> (Integer::u_bits());
+            *bh = bp.clone();
+            *bl = bp.clone() >> (Integer::u_bits());
+        } else if n == 2 {
+            let shift = mask.leading_zeros() as usize;
+            *ah = (ap.clone() << shift) & Integer::u_max();
+            *al = ap.clone() << shift;
+            *bh = (bp.clone() << shift) & Integer::u_max();
+            *bl = bp.clone() << shift;
+        } else {
+            let shift = mask.leading_zeros() as usize;
+            *ah = (ap.clone() << shift) & Integer::u_max();
+            *al = (ap.clone() >> Integer::u_bits()) << shift;
+            *bh = (bp.clone() << shift) & Integer::u_max();
+            *bl = (bp.clone() >> Integer::u_bits()) << shift;
+        }
+    }
+
+    // Helper function to extract most significant bits of an Integer
+    fn leading_zeros(val: &Integer) -> usize {
+        Integer::u_bits() - val.significant_bits()
+    }
+
+    fn partial_euclid(
+        u00: &mut Integer,
+        u01: &mut Integer,
+        u10: &mut Integer,
+        u11: &mut Integer,
+        a: &mut Integer,
+        b: &mut Integer,
+        target_nlimb: usize,
+        t0: &mut Integer,
+        t1: &mut Integer,
+    ) {
+        let mut swapped = false;
+
+        // Ensure ABS(b) >= ABS(a)
+        if b.significant_bits() < a.significant_bits() {
+            std::mem::swap(a, b);
+            swapped = true;
+        }
+
+        // Handle signs before swapping
+        let a_is_neg = a.is_negative();
+        let b_is_neg = b.is_negative();
+
+        if a.is_zero() {
+            // Identity matrix
+            u00.assign(1);
+            u01.assign(0);
+            u10.assign(0);
+            u11.assign(1);
+        } else {
+            let mut n = b.significant_bits();
+
+            u10.assign(0);
+            u11.assign(1);
+            let mut un = 1;
+
+            u00.assign(1);
+            u01.assign(0);
+            let mut vn = 1;
+
+            t0.assign(0);
+            t1.assign(0);
+
+            while n > target_nlimb {
+                let mut ah = Integer::new();
+                let mut al = Integer::new();
+                let mut bh = Integer::new();
+                let mut bl = Integer::new();
+
+                Self::highest_two_limbs(&mut ah, &mut al, &mut bh, &mut bl, a, b, n as usize);
+
+                // Try an hgcd2 step
+                let mut matrix = HgcdMatrix1::new();
+                if hgcd2(&ah, &al, &bh, &bl, &mut matrix) {
+                    // Apply M^-1 * (a,b)
+                    n = matrix22_mul1_inverse_vector(&matrix, t1, a, b, n);
+                    a.assign(&t1);
+
+                    // Apply (u10, u11) * M
+                    un = hgcd_mul_matrix1_vector(&matrix, t0, u10, u11, un);
+                    u10.assign(&t0);
+
+                    // Apply (u00, u01) * M
+                    vn = hgcd_mul_matrix1_vector(&matrix, t0, u00, u01, vn);
+                    u00.assign(&t0);
+                } else {
+                    // Handling of large ratios or close values of a and b
+                    if bh < 2 {
+                        let mut bn = n - 1;
+                        t1.assign(0);
+                        let mut qn = Integer::new();
+                        n = bn;
+                        vn = addmul(u01, &t1, &qn, u00, vn, t0);
+                        un = addmul(u11, &t1, &qn, u10, un, t0);
+                    } else if ah < 2 {
+                        let mut an = n - 1;
+                        t1.assign(0);
+                        let mut qn = Integer::new();
+                        n = an;
+                        vn = addmul(u00, &t1, &qn, u01, vn, t0);
+                        un = addmul(u10, &t1, &qn, u11, un, t0);
+                    } else {
+                        let c = a.cmp(b);
+                        if c.is_lt() {
+                            b.sub_mut(a);
+                            u00.add_mut(u01);
+                            u10.add_mut(u11);
+                        } else {
+                            a.sub_mut(b);
+                            u01.add_mut(u00);
+                            u11.add_mut(u10);
+                        }
+                    }
+                }
+            }
+
+            a.assign_sign(n as i32, a_is_neg);
+            b.assign_sign(n as i32, b_is_neg);
+            u10.assign_sign(un as i32, b_is_neg ^ a_is_neg);
+            u11.assign(un);
+            u00.assign(vn);
+            u01.assign_sign(vn as i32, b_is_neg ^ a_is_neg);
+        }
+
+        if swapped {
+            std::mem::swap(u10, u01);
+            std::mem::swap(u11, u00);
+            std::mem::swap(a, b);
+        }
+    }
+}*/

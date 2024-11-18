@@ -8,6 +8,7 @@ use std::cmp::Ordering;
 
 #[cfg(feature = "random")]
 use rand_core::CryptoRng;
+use rug::integer::{Order, UnsignedPrimitive};
 
 #[derive(Debug)]
 pub struct EuclideanDivResult<Z> {
@@ -24,8 +25,15 @@ pub struct EuclideanDivResult<Z> {
 pub trait Z {
     fn zero() -> Self;
 
+
+     fn from_digits<T>(digits: &[T], order: Order) -> Self
+    where
+        T: UnsignedPrimitive;
+
     /// Returns the default value of the integer type, typically zero.
     fn default() -> Self;
+
+    fn to_string(&self) -> String;
 
     fn from(n: u64) -> Self
     where

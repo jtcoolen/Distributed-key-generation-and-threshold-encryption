@@ -5,9 +5,45 @@
 use std::cmp::Ordering::{Equal, Greater};
 use std::fmt::Debug;
 
+use bicycl::b_i_c_y_c_l::{self, ClassGroup, Mpz, QFI};
+use bicycl::cpp_core::{self, CppBox, MutRef, Ref};
+use bicycl::cpp_std::{self, VectorOfUchar};
+use bicycl::{VectorOfMpz, VectorOfQFI};
+use rug::integer::Order;
 use serde::Serialize;
 
-use crate::z::{self};
+use crate::z::{self, Z};
+
+fn mpz_to_int<Z: z::Z>(n: &Mpz) -> Z {
+    let mut a_bytes = unsafe { VectorOfUchar::new() };
+
+    let mutref_a_bytes: cpp_core::MutRef<VectorOfUchar> =
+        unsafe { cpp_core::MutRef::from_raw_ref(&mut a_bytes) };
+
+    unsafe { n.mpz_to_vector(mutref_a_bytes) };
+    let limbs = unsafe { bicycl::cpp_vec_to_rust(&mutref_a_bytes) };
+    let mut limbs = limbs[1..].to_vec();
+    limbs.reverse();
+    let res = Z::from_digits(&limbs, Order::Lsf);
+
+    if unsafe { Mpz::sgn(&n) == 1 } {
+        res
+    } else {
+        res.neg()
+    }
+}
+
+fn int_to_mpz<Z: z::Z>(n: Z) -> CppBox<Mpz> {
+    let string: String = n.to_string(); // base 10 representation
+
+    let mut cpp_str = unsafe { bicycl::cpp_std::String::new() };
+
+    for e in string.chars() {
+        unsafe { cpp_std::String::append_usize_char(&mut cpp_str, 1, e as i8) };
+    }
+    let cpp_ref: _ = unsafe { cpp_core::Ref::from_raw(cpp_str.as_mut_raw_ptr()).unwrap() };
+    unsafe { Mpz::from_string(cpp_ref) }
+}
 
 pub trait BinaryQuadraticForm<Z>
 where
@@ -43,7 +79,80 @@ where
     where
         Self: Sized,
     {
-        let mut g = self.b().add(&other.b());
+        use bicycl::cpp_std::String;
+        use std::ffi::c_char;
+        let a = self.a().to_string();
+
+        let s: bicycl::cpp_std::cpp_core::CppBox<String> =
+            unsafe { String::from_char_usize(a.as_ptr() as *const c_char, a.len()) };
+        let s: Ref<String> = unsafe { Ref::from_raw_ref(&s) };
+        let a = unsafe { b_i_c_y_c_l::Mpz::from_string(s) };
+
+        let b = self.b().to_string();
+        let s: bicycl::cpp_std::cpp_core::CppBox<String> =
+            unsafe { String::from_char_usize(b.as_ptr() as *const c_char, b.len()) };
+        let s: Ref<String> = unsafe { Ref::from_raw_ref(&s) };
+        let b = unsafe { b_i_c_y_c_l::Mpz::from_string(s) };
+
+        let c = self.c().to_string();
+        let s: bicycl::cpp_std::cpp_core::CppBox<String> =
+            unsafe { String::from_char_usize(c.as_ptr() as *const c_char, c.len()) };
+        let s: Ref<String> = unsafe { Ref::from_raw_ref(&s) };
+        let c = unsafe { b_i_c_y_c_l::Mpz::from_string(s) };
+
+        let a_: cpp_core::Ref<Mpz> = unsafe { cpp_core::Ref::from_raw_ref(&a) };
+        let b_: cpp_core::Ref<Mpz> = unsafe { cpp_core::Ref::from_raw_ref(&b) };
+        let c_: cpp_core::Ref<Mpz> = unsafe { cpp_core::Ref::from_raw_ref(&c) };
+        let mut qfi = unsafe { bicycl::b_i_c_y_c_l::QFI::new_4a(a_, b_, c_, false) };
+
+        /////
+
+        let a = other.a().to_string();
+
+        let s: bicycl::cpp_std::cpp_core::CppBox<String> =
+            unsafe { String::from_char_usize(a.as_ptr() as *const c_char, a.len()) };
+        let s: Ref<String> = unsafe { Ref::from_raw_ref(&s) };
+        let a = unsafe { b_i_c_y_c_l::Mpz::from_string(s) };
+
+        let b = other.b().to_string();
+        let s: bicycl::cpp_std::cpp_core::CppBox<String> =
+            unsafe { String::from_char_usize(b.as_ptr() as *const c_char, b.len()) };
+        let s: Ref<String> = unsafe { Ref::from_raw_ref(&s) };
+        let b = unsafe { b_i_c_y_c_l::Mpz::from_string(s) };
+
+        let c = other.c().to_string();
+        let s: bicycl::cpp_std::cpp_core::CppBox<String> =
+            unsafe { String::from_char_usize(c.as_ptr() as *const c_char, c.len()) };
+        let s: Ref<String> = unsafe { Ref::from_raw_ref(&s) };
+        let c = unsafe { b_i_c_y_c_l::Mpz::from_string(s) };
+
+        let a_: cpp_core::Ref<Mpz> = unsafe { cpp_core::Ref::from_raw_ref(&a) };
+        let b_: cpp_core::Ref<Mpz> = unsafe { cpp_core::Ref::from_raw_ref(&b) };
+        let c_: cpp_core::Ref<Mpz> = unsafe { cpp_core::Ref::from_raw_ref(&c) };
+        let qfi2 = unsafe { bicycl::b_i_c_y_c_l::QFI::new_4a(a_, b_, c_, false) };
+
+        let disc = unsafe { b_i_c_y_c_l::QFI::discriminant(&qfi) };
+
+        let cl = unsafe { b_i_c_y_c_l::ClassGroup::new(&disc) };
+
+        unsafe { ClassGroup::nucomp(&cl, qfi.as_mut_ref(), qfi.as_ref(), qfi2.as_ref()) };
+
+        let a: Z = mpz_to_int(unsafe { &QFI::a(&qfi) });
+        let b: Z = mpz_to_int(unsafe { &QFI::b(&qfi) });
+        let c: Z = mpz_to_int(unsafe { &QFI::c(&qfi) });
+
+        Self::new(&a, &b, &c) //.reduce()
+                              //Self::new(&other.a(), &other.b(), &other.c())
+
+        /*let a = mpz_to_int(unsafe { &QFI::a(&qfi) });
+        let b = mpz_to_int(unsafe { &QFI::b(&qfi) });
+        let c = mpz_to_int(unsafe { &QFI::c(&qfi) });
+
+        Self::new(&a, &b, &c)*/
+
+        ////
+
+        /*let mut g = self.b().add(&other.b());
         g.divide_by_2_exact();
         let w = self.a().gcd(&other.a()).gcd(&g);
         let mut h = other.b().sub(&self.b());
@@ -70,21 +179,59 @@ where
             .divide_exact(&st);
         let b = j.mul(&u).sub(&k.mul(&t)).sub(&l.mul(&s));
         let c = k.mul(&l).sub(&j.mul(&m));
-        Self::new(&st, &b, &c).reduce()
+        Self::new(&st, &b, &c).reduce()*/
     }
 
     // For squaring https://www.michaelstraka.com/posts/classgroups/
     // optimization if discriminant is negative of a prime
+    // less impact often than compose in terms of performance, seems slower due to conversions
     fn double(&self) -> Self
     where
         Self: Sized,
     {
-        let (mu, _) = self.b().solve_congruence(&self.c(), &self.a());
+        /*let (mu, _) = self.b().solve_congruence(&self.c(), &self.a());
         let a = self.a().sqr();
         let b = self.b().sub(&Z::from(2).mul(&self.a()).mul(&mu));
         let rhs = self.b().mul(&mu).sub(&self.c()).divide_exact(&self.a());
         let c = mu.sqr().sub(&rhs);
-        Self::new(&a, &b, &c).reduce()
+        Self::new(&a, &b, &c).reduce()*/
+        use bicycl::cpp_std::String;
+        use std::ffi::c_char;
+        let a = self.a().to_string();
+
+        let s: bicycl::cpp_std::cpp_core::CppBox<String> =
+            unsafe { String::from_char_usize(a.as_ptr() as *const c_char, a.len()) };
+        let s: Ref<String> = unsafe { Ref::from_raw_ref(&s) };
+        let a = unsafe { b_i_c_y_c_l::Mpz::from_string(s) };
+
+        let b = self.b().to_string();
+        let s: bicycl::cpp_std::cpp_core::CppBox<String> =
+            unsafe { String::from_char_usize(b.as_ptr() as *const c_char, b.len()) };
+        let s: Ref<String> = unsafe { Ref::from_raw_ref(&s) };
+        let b = unsafe { b_i_c_y_c_l::Mpz::from_string(s) };
+
+        let c = self.c().to_string();
+        let s: bicycl::cpp_std::cpp_core::CppBox<String> =
+            unsafe { String::from_char_usize(c.as_ptr() as *const c_char, c.len()) };
+        let s: Ref<String> = unsafe { Ref::from_raw_ref(&s) };
+        let c = unsafe { b_i_c_y_c_l::Mpz::from_string(s) };
+
+        let a_: cpp_core::Ref<Mpz> = unsafe { cpp_core::Ref::from_raw_ref(&a) };
+        let b_: cpp_core::Ref<Mpz> = unsafe { cpp_core::Ref::from_raw_ref(&b) };
+        let c_: cpp_core::Ref<Mpz> = unsafe { cpp_core::Ref::from_raw_ref(&c) };
+        let mut qfi = unsafe { bicycl::b_i_c_y_c_l::QFI::new_4a(a_, b_, c_, false) };
+
+        let disc = unsafe { b_i_c_y_c_l::QFI::discriminant(&qfi) };
+
+        let cl = unsafe { b_i_c_y_c_l::ClassGroup::new(&disc) };
+
+        unsafe { ClassGroup::nudupl(&cl, qfi.as_mut_ref(), qfi.as_ref()) };
+
+        let a: Z = mpz_to_int(unsafe { &QFI::a(&qfi) });
+        let b: Z = mpz_to_int(unsafe { &QFI::b(&qfi) });
+        let c: Z = mpz_to_int(unsafe { &QFI::c(&qfi) });
+
+        Self::new(&a, &b, &c) //.reduce()
     }
 
     fn pow(&self, exponent: &Z) -> Self
@@ -92,7 +239,7 @@ where
         Self: Sized + Clone,
     {
         // naive double and add
-        let mut res = self.identity();
+        /*let mut res = self.identity();
         let n = exponent.bit_size();
         for i in (0..n).rev() {
             res = res.compose(&res);
@@ -100,7 +247,46 @@ where
                 res = res.compose(self);
             }
         }
-        res
+        res*/
+
+        use bicycl::cpp_std::String;
+        use std::ffi::c_char;
+        let a = self.a().to_string();
+
+        let s: bicycl::cpp_std::cpp_core::CppBox<String> =
+            unsafe { String::from_char_usize(a.as_ptr() as *const c_char, a.len()) };
+        let s: Ref<String> = unsafe { Ref::from_raw_ref(&s) };
+        let a = unsafe { b_i_c_y_c_l::Mpz::from_string(s) };
+
+        let b = self.b().to_string();
+        let s: bicycl::cpp_std::cpp_core::CppBox<String> =
+            unsafe { String::from_char_usize(b.as_ptr() as *const c_char, b.len()) };
+        let s: Ref<String> = unsafe { Ref::from_raw_ref(&s) };
+        let b = unsafe { b_i_c_y_c_l::Mpz::from_string(s) };
+
+        let c = self.c().to_string();
+        let s: bicycl::cpp_std::cpp_core::CppBox<String> =
+            unsafe { String::from_char_usize(c.as_ptr() as *const c_char, c.len()) };
+        let s: Ref<String> = unsafe { Ref::from_raw_ref(&s) };
+        let c = unsafe { b_i_c_y_c_l::Mpz::from_string(s) };
+
+        let a_: cpp_core::Ref<Mpz> = unsafe { cpp_core::Ref::from_raw_ref(&a) };
+        let b_: cpp_core::Ref<Mpz> = unsafe { cpp_core::Ref::from_raw_ref(&b) };
+        let c_: cpp_core::Ref<Mpz> = unsafe { cpp_core::Ref::from_raw_ref(&c) };
+        let mut qfi = unsafe { bicycl::b_i_c_y_c_l::QFI::new_4a(a_, b_, c_, false) };
+
+        let disc = unsafe { b_i_c_y_c_l::QFI::discriminant(&qfi) };
+
+        let cl = unsafe { b_i_c_y_c_l::ClassGroup::new(&disc) };
+
+        let exponent = int_to_mpz(exponent.clone());
+        unsafe { ClassGroup::nupow_3a(&cl, qfi.as_mut_ref(), qfi.as_ref(), exponent.as_ref()) };
+
+        let a: Z = mpz_to_int(unsafe { &QFI::a(&qfi) });
+        let b: Z = mpz_to_int(unsafe { &QFI::b(&qfi) });
+        let c: Z = mpz_to_int(unsafe { &QFI::c(&qfi) });
+
+        Self::new(&a, &b, &c) //.reduce()
     }
 
     fn inverse(self) -> Self;
@@ -390,7 +576,7 @@ impl<Z: z::Z + std::fmt::Debug + std::clone::Clone + std::cmp::PartialEq> Binary
         tmp0
     }
 
-    fn multiexp(x: &[BQF<Z>], e: &[Z]) -> BQF<Z> {
+    /*fn multiexp(x: &[BQF<Z>], e: &[Z]) -> BQF<Z> {
         // Check for size inconsistencies or empty vectors
         if x.len() != e.len() || x.is_empty() {
             panic!("invalid size");
@@ -479,5 +665,170 @@ impl<Z: z::Z + std::fmt::Debug + std::clone::Clone + std::cmp::PartialEq> Binary
         }
 
         p.reduce()
+    }*/
+    fn multiexp(x: &[BQF<Z>], e: &[Z]) -> BQF<Z> {
+        use crate::bqf::cpp_core::MutRef;
+
+        use bicycl::cpp_std::String;
+        use std::ffi::c_char;
+
+        let a = x[0].a().to_string();
+
+        let s: bicycl::cpp_std::cpp_core::CppBox<String> =
+            unsafe { String::from_char_usize(a.as_ptr() as *const c_char, a.len()) };
+        let s: Ref<String> = unsafe { Ref::from_raw_ref(&s) };
+        let a = unsafe { b_i_c_y_c_l::Mpz::from_string(s) };
+
+        let b = x[0].b().to_string();
+        let s: bicycl::cpp_std::cpp_core::CppBox<String> =
+            unsafe { String::from_char_usize(b.as_ptr() as *const c_char, b.len()) };
+        let s: Ref<String> = unsafe { Ref::from_raw_ref(&s) };
+        let b = unsafe { b_i_c_y_c_l::Mpz::from_string(s) };
+
+        let c = x[0].c().to_string();
+        let s: bicycl::cpp_std::cpp_core::CppBox<String> =
+            unsafe { String::from_char_usize(c.as_ptr() as *const c_char, c.len()) };
+        let s: Ref<String> = unsafe { Ref::from_raw_ref(&s) };
+        let c = unsafe { b_i_c_y_c_l::Mpz::from_string(s) };
+
+        let a_: cpp_core::Ref<Mpz> = unsafe { cpp_core::Ref::from_raw_ref(&a) };
+        let b_: cpp_core::Ref<Mpz> = unsafe { cpp_core::Ref::from_raw_ref(&b) };
+        let c_: cpp_core::Ref<Mpz> = unsafe { cpp_core::Ref::from_raw_ref(&c) };
+        let qfi = unsafe { bicycl::b_i_c_y_c_l::QFI::new_4a(a_, b_, c_, false) };
+
+        let disc = unsafe { b_i_c_y_c_l::QFI::discriminant(&qfi) };
+
+        let cl = unsafe { b_i_c_y_c_l::ClassGroup::new(&disc) };
+
+        let mut lhs_qfi = unsafe { QFI::new_0a() };
+        let mutref_lhs: MutRef<QFI> = unsafe { MutRef::from_raw_ref(&mut lhs_qfi) };
+
+        let mut pks = unsafe { VectorOfQFI::new() };
+        for i in 0..x.len() {
+            let e: BQF<Z> = x[i].clone();
+
+            let a = e.a().to_string();
+
+            let s: bicycl::cpp_std::cpp_core::CppBox<String> =
+                unsafe { String::from_char_usize(a.as_ptr() as *const c_char, a.len()) };
+            let s: Ref<String> = unsafe { Ref::from_raw_ref(&s) };
+            let a = unsafe { b_i_c_y_c_l::Mpz::from_string(s) };
+
+            let b = e.b().to_string();
+            let s: bicycl::cpp_std::cpp_core::CppBox<String> =
+                unsafe { String::from_char_usize(b.as_ptr() as *const c_char, b.len()) };
+            let s: Ref<String> = unsafe { Ref::from_raw_ref(&s) };
+            let b = unsafe { b_i_c_y_c_l::Mpz::from_string(s) };
+
+            let c = e.c().to_string();
+            let s: bicycl::cpp_std::cpp_core::CppBox<String> =
+                unsafe { String::from_char_usize(c.as_ptr() as *const c_char, c.len()) };
+            let s: Ref<String> = unsafe { Ref::from_raw_ref(&s) };
+            let c = unsafe { b_i_c_y_c_l::Mpz::from_string(s) };
+
+            let a_: cpp_core::Ref<Mpz> = unsafe { cpp_core::Ref::from_raw_ref(&a) };
+            let b_: cpp_core::Ref<Mpz> = unsafe { cpp_core::Ref::from_raw_ref(&b) };
+            let c_: cpp_core::Ref<Mpz> = unsafe { cpp_core::Ref::from_raw_ref(&c) };
+            let qfi = unsafe { bicycl::b_i_c_y_c_l::QFI::new_4a(a_, b_, c_, false) };
+
+            unsafe { pks.push_back(&qfi) };
+        }
+        let ref_pks: Ref<VectorOfQFI> = unsafe { Ref::from_raw_ref(&pks) };
+
+        let mut x_pows_mpz = unsafe { VectorOfMpz::new() };
+        for x_pow in e {
+            let x_pow_mpz = int_to_mpz(x_pow.clone());
+            let ref_xpow_mpz: Ref<Mpz> = unsafe { Ref::from_raw_ref(&x_pow_mpz) };
+            unsafe { x_pows_mpz.push_back(ref_xpow_mpz) };
+        }
+        let ref_xpows_mpz: Ref<VectorOfMpz> = unsafe { Ref::from_raw_ref(&x_pows_mpz) };
+
+        unsafe {
+            bicycl::b_i_c_y_c_l::ClassGroup::mult_exp(&cl, mutref_lhs, ref_pks, ref_xpows_mpz)
+        };
+
+        let a: Z = mpz_to_int(unsafe { &QFI::a(&qfi) });
+        let b: Z = mpz_to_int(unsafe { &QFI::b(&qfi) });
+        let c: Z = mpz_to_int(unsafe { &QFI::c(&qfi) });
+
+        Self::new(&a, &b, &c)
+
+        // Check for size inconsistencies or empty vectors
+        /*if x.len() != e.len() || x.is_empty() {
+            panic!("invalid size");
+        }
+
+        let blank = BQF::new(&Z::from(1), &Z::from(1), &Z::from(1));
+        let n = x.len();
+        let mut p = blank.clone(); // Initialize P
+
+        // Precompute bit sizes for 'e'
+        let bit_sizes: Vec<usize> = e.iter().map(|ei| ei.bit_size() as usize).collect();
+        let max_bits = *bit_sizes.iter().max().unwrap();
+        let nb = (max_bits + 3) / 4;
+
+        let mut b = vec![blank.clone(); 16]; // Reuse this array
+
+        // Pippenger's algorithm
+        for i in (0..nb).rev() {
+            // Reset the array B for each iteration
+            b.fill(blank.clone());
+
+            // Collect bucket values for the current iteration
+            for (j, ei) in e.iter().enumerate() {
+                let mut mt = ei.clone();
+                Z::divide_pow2(&mut mt, 4 * i);
+                let mut res = mt.clone();
+                res.rem_trunc_inplace(&Z::from(16));
+
+                let k = res.to_bytes_be().0.last().map_or(0, |&b| b as usize);
+
+                if b[k] == blank {
+                    b[k] = x[j].clone();
+                } else {
+                    b[k] = BQF::compose(&b[k], &x[j]);
+                }
+            }
+
+            let mut r = blank.clone();
+            let mut s = blank.clone();
+
+            // Combine bucket values
+            for j in (1..=15).rev() {
+                if b[j] != blank {
+                    if r == blank {
+                        r = b[j].clone();
+                    } else {
+                        r = BQF::compose(&r, &b[j]);
+                    }
+                }
+
+                if r != blank {
+                    if s == blank {
+                        s = r.clone();
+                    } else {
+                        s = BQF::compose(&s, &r);
+                    }
+                }
+            }
+
+            // Square p 4 times
+            if p != blank {
+                for _ in 0..4 {
+                    p = BQF::compose(&p, &p);
+                }
+            }
+
+            // Update p with s
+            if s != blank {
+                if p == blank {
+                    p = s.clone();
+                } else {
+                    p = BQF::compose(&p, &s);
+                }
+            }
+        }
+
+        p.reduce()*/
     }
 }
