@@ -344,7 +344,6 @@ pub fn aggregate_dealings<
 
     //assert!(extracted_secret_key_shares_with_dealings.len() == pp.n); // why does this fail with the binding to QFI multiexp?
 
-
     let (decrypted_evaluations, verified_dealings): (Vec<S>, Vec<Dealing<E, S, Z, P>>) =
         extracted_secret_key_shares_with_dealings
             .into_iter()
@@ -510,7 +509,7 @@ pub(crate) mod tests {
         //////////////
 
         let number_of_participants: usize = 7;
-        let threshold: usize = 5; // < number_of_participants / 2
+        let threshold: usize = 3; // < number_of_participants / 2
         let security_level = crate::cl_hsmq::SecurityLevel::SecLvl112;
 
         let start = Instant::now();
@@ -663,8 +662,6 @@ pub(crate) mod tests {
             blstrs::Scalar,
             Vec<blstrs::Scalar>,
         >(&pp, &dealings);
-
-      
 
         println!("Aggregate dealing public: {:?}", start.elapsed());
 

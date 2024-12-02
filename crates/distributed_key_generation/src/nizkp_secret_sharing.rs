@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 use std::fmt::Debug;
-use std::marker::PhantomData;
 use std::time::Instant;
 
 #[cfg(feature = "random")]
@@ -83,7 +82,6 @@ where
     discriminant: Z,
     generator_h: BQF<Z>,
     generator_f: BQF<Z>,
-    _integer_type: PhantomData<Z>,
 }
 
 impl<Z> Config<Z>
@@ -108,7 +106,6 @@ where
             discriminant,
             generator_h,
             generator_f,
-            _integer_type: Default::default(),
         }
     }
 }
@@ -189,8 +186,6 @@ where
     pub(crate) ciphertexts: Vec<BQF<Z>>,
     #[serde(serialize_with = "vec_ec_tobytes")]
     pub(crate) polynomial_coefficients_commitments: Vec<E>,
-    pub(crate) _scalar_type: PhantomData<S>,
-    pub(crate) _int_type: PhantomData<Z>,
 }
 
 /// Represents the proof for the protocol, containing values for verification.
@@ -242,8 +237,6 @@ where
         ciphertexts_common: convert_bqf_z(&instance.ciphertexts_common),
         ciphertexts: instance.ciphertexts.iter().map(convert_bqf_z).collect(),
         polynomial_coefficients_commitments: instance.polynomial_coefficients_commitments.clone(),
-        _scalar_type: Default::default(),
-        _int_type: Default::default(),
     }
 }
 
@@ -487,12 +480,11 @@ pub(crate) fn verify<
     let now = Instant::now();
     // Verify third equation: multiexp(instance.ciphertexts, points)^gamma_prime_z * proof.y == multiexp(instance.public_keys, points)^proof.z_r * f^z_s
     let points = compute_gamma_powers(config.n as usize, &gamma_z);
-    
+
     let lhs = BQF::multiexp(&instance.ciphertexts, &points)
         .pow(&gamma_prime_z)
         .compose(&proof.y.reduce());
 
-        
     let mut rhs = BQF::multiexp(&instance.public_keys, &points);
 
     let f_pow = power_f(
@@ -504,9 +496,9 @@ pub(crate) fn verify<
     rhs = rhs.pow(&proof.z_r).compose(&f_pow);
 
     let res = lhs.equals(&rhs);
-  
+
     println!("third check {:?}", now.elapsed());
-    
+
     res
 }
 

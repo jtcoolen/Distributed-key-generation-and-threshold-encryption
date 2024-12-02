@@ -18,7 +18,7 @@ use crate::cl_hsmq::{ClHSMq, ClHSMqInstance};
 use crate::elliptic_curve::EllipticCurve;
 use crate::polynomial::Polynomial;
 
-/// Returns an  
+/// Returns an
 #[cfg(feature = "random")]
 pub fn share<
     R: RngCore + CryptoRng,
@@ -86,8 +86,6 @@ where
         ciphertexts_common: common.clone(),
         ciphertexts: encryptions.clone(),
         polynomial_coefficients_commitments: cmt.to_owned(),
-        _scalar_type: Default::default(),
-        _int_type: Default::default(),
     };
     let witness = crate::nizkp_secret_sharing::Witness {
         s: shares.to_owned(),
@@ -117,8 +115,6 @@ pub fn verify<
         ciphertexts_common: common_enc.clone(),
         ciphertexts: enc_shares.to_owned(),
         polynomial_coefficients_commitments: cmt.to_owned(),
-        _scalar_type: Default::default(),
-        _int_type: Default::default(),
     };
     crate::nizkp_secret_sharing::verify(pocs_config, &instance, proof)
 }
@@ -203,7 +199,7 @@ pub fn generate_dealing_resharing<
     Z: crate::z::Z + std::fmt::Debug + Clone + Serialize + std::cmp::PartialEq,
     E: EllipticCurve<S = S> + Clone + Debug,
     S: crate::scalar::Scalar + Clone + Debug,
-    P: Polynomial<Scalar = S> + Clone+ Debug,
+    P: Polynomial<Scalar = S> + Clone + Debug,
 >(
     rng: &mut R,
     pp: &PublicParameters<Z>,
@@ -235,7 +231,7 @@ where
         encryptions,
         correct_sharing_proof,
         cmt,
-        p
+        p,
     }
 }
 
@@ -245,7 +241,7 @@ pub fn generate_dealing<
     Z: crate::z::Z + std::fmt::Debug + Clone + Serialize + std::cmp::PartialEq,
     E: EllipticCurve<S = S> + Clone + Debug,
     S: crate::scalar::Scalar + Clone + Debug,
-    P: Polynomial<Scalar = S> + Clone+ Debug,
+    P: Polynomial<Scalar = S> + Clone + Debug,
 >(
     rng: &mut R,
     pp: &PublicParameters<Z>,
@@ -262,7 +258,7 @@ pub fn verify_dealing<
     Z: crate::z::Z + std::fmt::Debug + Clone + Serialize + std::cmp::PartialEq,
     E: EllipticCurve<S = S> + Clone,
     S: crate::scalar::Scalar + Clone + Debug,
-    P: Polynomial<Scalar = S> + Clone+ Debug,
+    P: Polynomial<Scalar = S> + Clone + Debug,
 >(
     pp: &PublicParameters<Z>,
     public_keys: &[BQF<Z>],
@@ -291,7 +287,7 @@ pub fn verify_dealing_output_secret_key_share<
     Z: crate::z::Z + std::fmt::Debug + Clone + Serialize + std::cmp::PartialEq,
     E: EllipticCurve<S = S> + Clone,
     S: crate::scalar::Scalar + Clone + Debug,
-    P: Polynomial<Scalar = S> + Clone+ Debug,
+    P: Polynomial<Scalar = S> + Clone + Debug,
 >(
     pp: &PublicParameters<Z>,
     index: usize,
@@ -319,7 +315,6 @@ pub fn verify_dealing_output_secret_key_share<
         return None;
     }
     println!("verify comm for dealing {:?}", now.elapsed());
-
 
     Some(s)
 }
