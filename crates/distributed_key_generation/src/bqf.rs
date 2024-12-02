@@ -45,6 +45,117 @@ fn int_to_mpz<Z: z::Z>(n: Z) -> CppBox<Mpz> {
     unsafe { Mpz::from_string(cpp_ref) }
 }
 
+fn compose<Z: z::Z + Debug + Clone + PartialEq, F: BinaryQuadraticForm<Z>>(
+    slf: &F,
+    other: &F,
+    cl: &CppBox<ClassGroup>,
+) -> F {
+    use bicycl::cpp_std::String;
+    use std::ffi::c_char;
+
+    //
+
+    let a = slf.a().to_string();
+
+    let s: bicycl::cpp_std::cpp_core::CppBox<String> =
+        unsafe { String::from_char_usize(a.as_ptr() as *const c_char, a.len()) };
+    let s: Ref<String> = unsafe { Ref::from_raw_ref(&s) };
+    let a = unsafe { b_i_c_y_c_l::Mpz::from_string(s) };
+
+    let b = slf.b().to_string();
+    let s: bicycl::cpp_std::cpp_core::CppBox<String> =
+        unsafe { String::from_char_usize(b.as_ptr() as *const c_char, b.len()) };
+    let s: Ref<String> = unsafe { Ref::from_raw_ref(&s) };
+    let b = unsafe { b_i_c_y_c_l::Mpz::from_string(s) };
+
+    let c = slf.c().to_string();
+    let s: bicycl::cpp_std::cpp_core::CppBox<String> =
+        unsafe { String::from_char_usize(c.as_ptr() as *const c_char, c.len()) };
+    let s: Ref<String> = unsafe { Ref::from_raw_ref(&s) };
+    let c = unsafe { b_i_c_y_c_l::Mpz::from_string(s) };
+
+    let a_: cpp_core::Ref<Mpz> = unsafe { cpp_core::Ref::from_raw_ref(&a) };
+    let b_: cpp_core::Ref<Mpz> = unsafe { cpp_core::Ref::from_raw_ref(&b) };
+    let c_: cpp_core::Ref<Mpz> = unsafe { cpp_core::Ref::from_raw_ref(&c) };
+    let mut qfi = unsafe { bicycl::b_i_c_y_c_l::QFI::new_4a(a_, b_, c_, false) };
+
+    /////
+
+    let a = other.a().to_string();
+
+    let s: bicycl::cpp_std::cpp_core::CppBox<String> =
+        unsafe { String::from_char_usize(a.as_ptr() as *const c_char, a.len()) };
+    let s: Ref<String> = unsafe { Ref::from_raw_ref(&s) };
+    let a = unsafe { b_i_c_y_c_l::Mpz::from_string(s) };
+
+    let b = other.b().to_string();
+    let s: bicycl::cpp_std::cpp_core::CppBox<String> =
+        unsafe { String::from_char_usize(b.as_ptr() as *const c_char, b.len()) };
+    let s: Ref<String> = unsafe { Ref::from_raw_ref(&s) };
+    let b = unsafe { b_i_c_y_c_l::Mpz::from_string(s) };
+
+    let c = other.c().to_string();
+    let s: bicycl::cpp_std::cpp_core::CppBox<String> =
+        unsafe { String::from_char_usize(c.as_ptr() as *const c_char, c.len()) };
+    let s: Ref<String> = unsafe { Ref::from_raw_ref(&s) };
+    let c = unsafe { b_i_c_y_c_l::Mpz::from_string(s) };
+
+    let a_: cpp_core::Ref<Mpz> = unsafe { cpp_core::Ref::from_raw_ref(&a) };
+    let b_: cpp_core::Ref<Mpz> = unsafe { cpp_core::Ref::from_raw_ref(&b) };
+    let c_: cpp_core::Ref<Mpz> = unsafe { cpp_core::Ref::from_raw_ref(&c) };
+    let qfi2 = unsafe { bicycl::b_i_c_y_c_l::QFI::new_4a(a_, b_, c_, false) };
+
+    //let disc = unsafe { b_i_c_y_c_l::QFI::discriminant(&qfi) };
+
+    //let cl = unsafe { b_i_c_y_c_l::ClassGroup::new(&disc) };
+
+    unsafe { ClassGroup::nucomp(&cl, qfi.as_mut_ref(), qfi.as_ref(), qfi2.as_ref()) };
+
+    let a: Z = mpz_to_int(unsafe { &QFI::a(&qfi) });
+    let b: Z = mpz_to_int(unsafe { &QFI::b(&qfi) });
+    let c: Z = mpz_to_int(unsafe { &QFI::c(&qfi) });
+
+    F::new(&a, &b, &c) //.reduce()
+                       //Self::new(&other.a(), &other.b(), &other.c())
+
+    /*let a = mpz_to_int(unsafe { &QFI::a(&qfi) });
+    let b = mpz_to_int(unsafe { &QFI::b(&qfi) });
+    let c = mpz_to_int(unsafe { &QFI::c(&qfi) });
+
+    Self::new(&a, &b, &c)*/
+
+    ////
+
+    /*let mut g = self.b().add(&other.b());
+    g.divide_by_2_exact();
+    let w = self.a().gcd(&other.a()).gcd(&g);
+    let mut h = other.b().sub(&self.b());
+    h.divide_by_2_exact();
+    let j = Clone::clone(&w);
+    let s = self.a().divide_exact(&w);
+    let t = other.a().divide_exact(&w);
+    let u = g.divide_exact(&w);
+    let st = s.mul(&t);
+    let (mu, nu) = t.mul_mod(&u, &st).solve_congruence(
+        &h.mul_mod(&u, &st).add_mod(&s.mul_mod(&self.c(), &st), &st),
+        &st,
+    );
+    let (lambda, _) = t
+        .mul_mod(&nu, &s)
+        .solve_congruence(&h.sub_mod(&t.mul_mod(&mu, &s), &s), &s);
+    let k = mu.add(&nu.mul(&lambda));
+    let l = k.mul(&t).sub(&h).divide_exact(&s);
+    let m = t
+        .mul(&u)
+        .mul(&k)
+        .sub(&h.mul(&u))
+        .sub(&self.c().mul(&s))
+        .divide_exact(&st);
+    let b = j.mul(&u).sub(&k.mul(&t)).sub(&l.mul(&s));
+    let c = k.mul(&l).sub(&j.mul(&m));
+    Self::new(&st, &b, &c).reduce()*/
+}
+
 pub trait BinaryQuadraticForm<Z>
 where
     Z: crate::z::Z + std::fmt::Debug + Clone + PartialEq,
@@ -81,6 +192,9 @@ where
     {
         use bicycl::cpp_std::String;
         use std::ffi::c_char;
+
+        //
+
         let a = self.a().to_string();
 
         let s: bicycl::cpp_std::cpp_core::CppBox<String> =
@@ -576,7 +690,47 @@ impl<Z: z::Z + std::fmt::Debug + std::clone::Clone + std::cmp::PartialEq> Binary
         tmp0
     }
 
-    /*fn multiexp(x: &[BQF<Z>], e: &[Z]) -> BQF<Z> {
+    /// conversion to Bicycl QFI is costly
+    /// we would need Shanks' NUCOMP implemented for gmp
+    /// or use b_i_c_y_c_l::Mpz::copy_from_mpz and pass raw pointer to mpz struct?
+    fn multiexp(x: &[BQF<Z>], e: &[Z]) -> BQF<Z> {
+
+        
+        use bicycl::cpp_std::String;
+        use std::ffi::c_char;
+
+        let a = x[0].a().to_string();
+
+        let s: bicycl::cpp_std::cpp_core::CppBox<String> =
+            unsafe { String::from_char_usize(a.as_ptr() as *const c_char, a.len()) };
+        let s: Ref<String> = unsafe { Ref::from_raw_ref(&s) };
+        let a = unsafe { b_i_c_y_c_l::Mpz::from_string(s) };
+
+
+        let b = x[0].b().to_string();
+        let s: bicycl::cpp_std::cpp_core::CppBox<String> =
+            unsafe { String::from_char_usize(b.as_ptr() as *const c_char, b.len()) };
+        let s: Ref<String> = unsafe { Ref::from_raw_ref(&s) };
+        let b = unsafe { b_i_c_y_c_l::Mpz::from_string(s) };
+
+        let c = x[0].c().to_string();
+        let s: bicycl::cpp_std::cpp_core::CppBox<String> =
+            unsafe { String::from_char_usize(c.as_ptr() as *const c_char, c.len()) };
+        let s: Ref<String> = unsafe { Ref::from_raw_ref(&s) };
+        let c = unsafe { b_i_c_y_c_l::Mpz::from_string(s) };
+
+        let a_: cpp_core::Ref<Mpz> = unsafe { cpp_core::Ref::from_raw_ref(&a) };
+        let b_: cpp_core::Ref<Mpz> = unsafe { cpp_core::Ref::from_raw_ref(&b) };
+        let c_: cpp_core::Ref<Mpz> = unsafe { cpp_core::Ref::from_raw_ref(&c) };
+        let qfi = unsafe { bicycl::b_i_c_y_c_l::QFI::new_4a(a_, b_, c_, false) };
+
+        let disc = unsafe { b_i_c_y_c_l::QFI::discriminant(&qfi) };
+
+        let cl = unsafe { b_i_c_y_c_l::ClassGroup::new(&disc) };
+
+        //
+
+
         // Check for size inconsistencies or empty vectors
         if x.len() != e.len() || x.is_empty() {
             panic!("invalid size");
@@ -624,7 +778,7 @@ impl<Z: z::Z + std::fmt::Debug + std::clone::Clone + std::cmp::PartialEq> Binary
                 if b[k] == blank {
                     b[k] = x[j].clone();
                 } else {
-                    b[k] = BQF::compose(&b[k], &x[j]);
+                    b[k] = compose(&b[k], &x[j], &cl);
                 }
             }
 
@@ -636,7 +790,7 @@ impl<Z: z::Z + std::fmt::Debug + std::clone::Clone + std::cmp::PartialEq> Binary
                     if r == blank {
                         r = b[j].clone();
                     } else {
-                        r = r.compose(&b[j]);
+                        r = compose(&r, &b[j], &cl);
                     }
                 }
 
@@ -644,14 +798,14 @@ impl<Z: z::Z + std::fmt::Debug + std::clone::Clone + std::cmp::PartialEq> Binary
                     if s == blank {
                         s = r.clone();
                     } else {
-                        s = s.compose(&r);
+                        s = compose(&s, &r, &cl);
                     }
                 }
             }
 
             if p != blank {
                 for _ in 0..4 {
-                    p = p.compose(&p);
+                    p = compose(&p, &p, &cl);
                 }
             }
 
@@ -659,14 +813,14 @@ impl<Z: z::Z + std::fmt::Debug + std::clone::Clone + std::cmp::PartialEq> Binary
                 if p == blank {
                     p = s.clone();
                 } else {
-                    p = p.compose(&s);
+                    p = compose(&p, &s, &cl);
                 }
             }
         }
 
         p.reduce()
-    }*/
-    fn multiexp(x: &[BQF<Z>], e: &[Z]) -> BQF<Z> {
+    }
+    /*fn multiexp(x: &[BQF<Z>], e: &[Z]) -> BQF<Z> {
         use crate::bqf::cpp_core::MutRef;
 
         use bicycl::cpp_std::String;
@@ -830,5 +984,5 @@ impl<Z: z::Z + std::fmt::Debug + std::clone::Clone + std::cmp::PartialEq> Binary
         }
 
         p.reduce()*/
-    }
+    }*/
 }
