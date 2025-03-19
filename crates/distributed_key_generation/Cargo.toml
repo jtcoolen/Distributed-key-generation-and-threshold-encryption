@@ -29,7 +29,10 @@ group = "0.13.0"
 ff = "0.13.0"
 bincode = "1.3.2"
 bytemuck = "1.16.0"
-crypto-bigint = {version = "0.6.0-rc.0", default-features = false, git="https://github.com/jtcoolen/crypto-bigint"}
+crypto-bigint = {version = "0.6.0-rc.0", default-features = false}
+criterion.workspace = true
+iai-callgrind = "0.14.0"
+clippy = "0.0.302"
 
 [dev-dependencies]
 proptest-derive = "0.2.0"
@@ -53,9 +56,15 @@ opt-level = 3
 linker = "emcc"
 ar = "emar"
 
+[profile.test]
+inherits = "release"
+
 
 [features]
 default = ["gmp", "random"]
 gmp = ["rug"]
 random = ["getrandom", "rand", "rand_core"]
 
+[[bench]]
+name = "benchmark"
+harness = false

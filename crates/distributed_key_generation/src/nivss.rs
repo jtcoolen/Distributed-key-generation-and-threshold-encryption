@@ -35,7 +35,7 @@ pub fn share<
     let p_len = p.coefficients().len();
     assert_eq!(p_len, threshold + 1);
     p.set_coefficient(0, s);
-    println!("PPP={:?}, s={:?}", p, s);
+    // println!("PPP={:?}, s={:?}", p, s);
     let s_i = (1..=n).map(|i| p.evaluate(&S::from(i as u64))).collect();
     let cmt: Vec<E> = p
         .coefficients()
@@ -50,7 +50,7 @@ pub fn share<
     for (p, c) in p.coefficients().iter().zip(&cmt) {
         let mut e = E::generator().clone();
         e.mul_assign(p);
-        println!("p={:?}, c={:?}", c, e);
+        // println!("p={:?}, c={:?}", c, e);
     }
     (s_i, cmt, p)
 }

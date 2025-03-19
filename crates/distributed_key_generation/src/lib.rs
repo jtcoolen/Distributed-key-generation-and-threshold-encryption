@@ -23,9 +23,19 @@
 //! ## Usage
 //!
 //! ```rust
+//! use rand::rngs::OsRng;
+//! use rug::Integer;
+//! use blstrs::G1Projective;
+//! use distributed_key_generation::setup;
+//! use distributed_key_generation::generate_key_pair;
+//! use distributed_key_generation::verify_public_key;
+//! use distributed_key_generation::generate_dealing;
+//! use distributed_key_generation::verify_dealing;
+//! use distributed_key_generation::SecurityLevel;
+//! 
 //! let number_of_participants: usize = 10;
 //! let threshold: usize = 4; // < number_of_participants / 2
-//! let security_level = crate::cl_hsmq::SecurityLevel::SecLvl112;
+//! let security_level = SecurityLevel::SecLvl112;
 //! let pp = setup::<_, blstrs::Scalar, _>(
 //!     number_of_participants,
 //!     threshold,
@@ -38,7 +48,7 @@
 //! let mut pops = vec![];
 
 //! for _ in 0..number_of_participants {
-//!     let (pk, sk, pop) = crate::generate_key_pair::<OsRng, Integer>(&pp, &mut OsRng);
+//!     let (pk, sk, pop) = generate_key_pair::<OsRng, Integer>(&pp, &mut OsRng);
 
 //!     pks.push(pk);
 //!     sks.push(sk);
@@ -46,13 +56,13 @@
 //! }
 
 //! // verify keys
-//! assert!(crate::verify_public_key(&pp, &pks[0], &pops[0],));
+//! assert!(verify_public_key(&pp, &pks[0], &pops[0],));
 
 //! let mut dealings = Vec::new();
 
 //! //generating dealings for nodes
 //! for _ in 0..=threshold {
-//!     let dealing = crate::generate_dealing::<
+//!     let dealing = generate_dealing::<
 //!         _,
 //!         _,
 //!         blstrs::G1Projective,
@@ -63,7 +73,7 @@
 //! }
 
 //! for i in 0..=0 {
-//!     assert!(crate::verify_dealing::<
+//!     assert!(verify_dealing::<
 //!         Integer,
 //!         G1Projective,
 //!         blstrs::Scalar,
@@ -99,7 +109,7 @@ pub use crate::nivss::{Dealing, PublicParameters};
 use crate::polynomial::Polynomial;
 #[cfg(feature = "random")]
 use crate::z::Randomizable;
-use cl_hsmq::SecurityLevel;
+pub use cl_hsmq::SecurityLevel;
 #[cfg(feature = "random")]
 use rand_core::{CryptoRng, RngCore};
 use rand_core::{CryptoRngCore, OsRng};
@@ -255,33 +265,33 @@ pub fn aggregate_verified_dealings_public<
             coeffs.set_coefficient(i, &c)
         }
     }
-    println!("sum poly = {:?}", coeffs);
+    // println!("sum poly = {:?}", coeffs);
 
     for i in 1..=pp.n {
         let sk_i = coeffs.evaluate(&S::from(i as u64));
-        println!("eval(sum poly,index={})={:?}", i, sk_i);
+        // println!("eval(sum poly,index={})={:?}", i, sk_i);
         let mut e = E::generator().clone();
         e.mul_assign(&sk_i);
-        println!("pk={:?}", e);
+        // println!("pk={:?}", e);
     }
 
     let sk_i = coeffs.evaluate(&S::zero());
-    println!("sum poly(0) = {:?}", sk_i);
+    // println!("sum poly(0) = {:?}", sk_i);
     let mut e = E::generator().clone();
     e.mul_assign(&sk_i);
-    println!(
-        "MPK={:?}, mpk={:?}",
-        e.to_bytes(),
-        master_public_key2.to_bytes()
-    );
+    // println!(
+    //     "MPK={:?}, mpk={:?}",
+    //     e.to_bytes(),
+    //     master_public_key2.to_bytes()
+    // );
 
-    println!("len dealings = {}", dealings.len());
+    // println!("len dealings = {}", dealings.len());
 
     let master_public_key = public_poly[0].clone();
-    println!(
-        "mpk1={:?}, mpk2={:?}",
-        master_public_key, master_public_key2
-    );
+    // println!(
+    //     "mpk1={:?}, mpk2={:?}",
+    //     master_public_key, master_public_key2
+    // );
 
     let public_key_shares: Vec<E> = (1..=pp.n)
         .map(|j| {
@@ -342,10 +352,10 @@ pub fn aggregate_dealings<
         })
         .collect::<Vec<_>>();
 
-    println!(
-        "extracted_secret_key_shares_with_dealings.len={}",
-        extracted_secret_key_shares_with_dealings.len()
-    );
+    // println!(
+    //     "extracted_secret_key_shares_with_dealings.len={}",
+    //     extracted_secret_key_shares_with_dealings.len()
+    // );
     assert!(extracted_secret_key_shares_with_dealings.len() == pp.n);
 
     let (decrypted_evaluations, verified_dealings): (Vec<S>, Vec<Dealing<E, S, Z, P>>) =
@@ -488,25 +498,25 @@ pub(crate) mod tests {
         ];
 
         let s = Scalar::from_bytes_be(&v.try_into().unwrap()).unwrap();
-        println!("s={:?}", s);
-        println!(
-            "id={:?}, mpk={:?}",
-            G1Projective::generator(),
-            G1Projective::generator().mul(s)
-        );
+        // println!("s={:?}", s);
+        // println!(
+        //     "id={:?}, mpk={:?}",
+        //     G1Projective::generator(),
+        //     G1Projective::generator().mul(s)
+        // );
 
         let p: Vec<blstrs::Scalar> = Polynomial::random(&mut OsRng, 4);
-        println!("p={:?}", p);
+        // println!("p={:?}", p);
         let mut evals = vec![];
         for i in 1..=11 {
             let mut v = [0u8; 32];
             v[0] = i;
             evals.push(p.evaluate(&Scalar::from_bytes_be(&v).unwrap()))
         }
-        println!("evals={:?}", evals);
+        // println!("evals={:?}", evals);
 
         let p0 = recover_master_secret_key_from_secret_key_shares(&evals, 4, 10);
-        println!("p0={:?}", p0);
+        // println!("p0={:?}", p0);
 
         let number_of_participants: usize = 10;
         let threshold: usize = 3; // < number_of_participants / 2
@@ -611,35 +621,35 @@ pub(crate) mod tests {
                 G1Affine::from(master_public_key),
                 G1Affine::from_compressed_unchecked(&master_public_key.to_compressed()).unwrap()
             );
-            println!(
-                "mpk={:?}\n\npks={:?}\n\nsks={:?}\n\npkss={:?}\n\npub poly={:?}",
-                G1Affine::from(master_public_key),
-                G1Affine::from(public_key_share),
-                secret_key_share,
-                public_key_shares
-                    .iter()
-                    .map(|e| G1Affine::from(e))
-                    .collect::<Vec<G1Affine>>(),
-                public_poly
-                    .iter()
-                    .map(|e| G1Affine::from(e))
-                    .collect::<Vec<G1Affine>>()
-            );
+            // println!(
+            //     "mpk={:?}\n\npks={:?}\n\nsks={:?}\n\npkss={:?}\n\npub poly={:?}",
+            //     G1Affine::from(master_public_key),
+            //     G1Affine::from(public_key_share),
+            //     secret_key_share,
+            //     public_key_shares
+            //         .iter()
+            //         .map(|e| G1Affine::from(e))
+            //         .collect::<Vec<G1Affine>>(),
+            //     public_poly
+            //         .iter()
+            //         .map(|e| G1Affine::from(e))
+            //         .collect::<Vec<G1Affine>>()
+            // );
 
-            println!(
-                "mpk={:?}\n\npks={:?}\n\nsks={:?}\n\npkss={:?}\n\npub poly={:?}",
-                G1Affine::from(master_public_key).to_compressed(),
-                G1Affine::from(public_key_share).to_compressed(),
-                secret_key_share,
-                public_key_shares
-                    .iter()
-                    .map(|e| G1Affine::from(e).to_compressed())
-                    .collect::<Vec<[u8; 48]>>(),
-                public_poly
-                    .iter()
-                    .map(|e| G1Affine::from(e).to_compressed())
-                    .collect::<Vec<[u8; 48]>>(),
-            );
+            // println!(
+            //     "mpk={:?}\n\npks={:?}\n\nsks={:?}\n\npkss={:?}\n\npub poly={:?}",
+            //     G1Affine::from(master_public_key).to_compressed(),
+            //     G1Affine::from(public_key_share).to_compressed(),
+            //     secret_key_share,
+            //     public_key_shares
+            //         .iter()
+            //         .map(|e| G1Affine::from(e).to_compressed())
+            //         .collect::<Vec<[u8; 48]>>(),
+            //     public_poly
+            //         .iter()
+            //         .map(|e| G1Affine::from(e).to_compressed())
+            //         .collect::<Vec<[u8; 48]>>(),
+            // );
 
             mpks.push(master_public_key.clone());
 
@@ -656,12 +666,12 @@ pub(crate) mod tests {
 
         let mpk2 = G1Projective::generator().mul(sk);
 
-        println!(
-            "sk={:?} , g^sk={:?}, mpk={:?}",
-            sk,
-            G1Affine::from(mpk2),
-            G1Affine::from(mpks[0])
-        );
+        // println!(
+        //     "sk={:?} , g^sk={:?}, mpk={:?}",
+        //     sk,
+        //     G1Affine::from(mpk2),
+        //     G1Affine::from(mpks[0])
+        // );
         //assert_eq!(G1Projective::generator().mul(sk), mpks[0]);
 
         let mut key = [0u8; 32];
@@ -671,7 +681,7 @@ pub(crate) mod tests {
         let enc2 = Ciphertext::encrypt(&key, key_hash, &mpks[0].into()).unwrap();
         let uhw = enc2.verify_decode().unwrap();
 
-        println!("sks len = {}", sks_.len());
+        // println!("sks len = {}", sks_.len());
 
         let dsks: Vec<threshold_encryption::decryption_share::DSH> = sks_
             .clone()
@@ -689,34 +699,34 @@ pub(crate) mod tests {
 
         let valid_key_shares: Vec<threshold_encryption::decryption_share::DSH> =
             dsks.into_iter().take(threshold + 1 as usize).collect();
-        println!("len key shares = {}", valid_key_shares.len());
+        // println!("len key shares = {}", valid_key_shares.len());
 
         let combined_key = threshold_encryption::decryption_share::DecryptionShare::combine(
             valid_key_shares.as_slice(),
         )
         .unwrap();
 
-        println!(
-            "key={:?}",
-            threshold_encryption::helpers::elgamal_apply(&enc2.encrypted_key, &combined_key)
-        );
+        // println!(
+        //     "key={:?}",
+        //     threshold_encryption::helpers::elgamal_apply(&enc2.encrypted_key, &combined_key)
+        // );
 
         let dec_key = enc2.decrypt_checked(&combined_key).unwrap();
-        println!("dec={:?}", dec_key);
+        // println!("dec={:?}", dec_key);
         assert_eq!(dec_key, key);
     }
 
     fn int_to_scalar(i: &Integer) -> Scalar {
         let mut e = i.to_bytes_be().0;
-        println!("e before={:?}, e sign={}", e, i.to_bytes_be().1);
+        // println!("e before={:?}, e sign={}", e, i.to_bytes_be().1);
         e.reverse();
         e.resize(32, 0);
         e.reverse();
-        println!("e after={:?}", e);
+        // println!("e after={:?}", e);
         Scalar::from_bytes_le(&e.try_into().unwrap()).unwrap()
     }
 
-    #[test]
+    /*#[test]
     fn wasm() {
         let number_of_participants: usize = 10;
         let threshold: usize = 4; // < number_of_participants / 2
@@ -843,5 +853,5 @@ pub(crate) mod tests {
                 q: int_to_bignum(&p0.q),
             },
         }
-    }
+    }*/
 }

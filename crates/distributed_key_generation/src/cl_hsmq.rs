@@ -390,24 +390,24 @@ fn test_encrypt_decrypt_identity() {
     let security_level = SecurityLevel::SecLvl112;
     let mut rng = &mut OsRng;
 
-    println!("before new");
+    // println!("before new");
     let instance = ClHSMqInstance::new::<&mut OsRng, blstrs::Scalar>(security_level, &mut rng);
 
-    println!("before keygen");
+    // println!("before keygen");
 
     let (public_key, private_key) = instance.keygen::<&mut OsRng>(&mut rng);
 
-    println!("generated keys = pk={:?} sk={}", public_key, private_key);
+    // println!("generated keys = pk={:?} sk={}", public_key, private_key);
     let rd = blstrs::Scalar::random(&mut OsRng);
-    println!("rd={:?}", rd);
+    // println!("rd={:?}", rd);
     let cleartext = blstrs::Scalar::to_z(&rd); // Sample cleartext
-    println!("cleartext={:?}", cleartext);
+    // println!("cleartext={:?}", cleartext);
     let ciphertext: (BQF<Integer>, BQF<Integer>) =
         instance.encrypt::<&mut OsRng>(&public_key, &cleartext, &mut rng);
 
-    println!("generated ciphertext {:?}", ciphertext);
+    // println!("generated ciphertext {:?}", ciphertext);
 
-    println!("before decrypt");
+    // println!("before decrypt");
 
     let decrypted = instance.decrypt(&private_key, &ciphertext);
 
@@ -422,13 +422,13 @@ fn test_encrypt_decrypt_identity() {
     let public_keys: Vec<BQF<Integer>> = pk_sk.iter().map(|(k, _)| k.clone()).collect();
     let private_keys: Vec<Integer> = pk_sk.iter().map(|(_, s)| s.clone()).collect();
     let cleartexts: Vec<Integer> = (1..10).map(|_| blstrs::Scalar::to_z(&rd)).collect(); // Sample cleartext
-    println!("cleartext={:?}", cleartext);
+    // println!("cleartext={:?}", cleartext);
     let (common, ciphertexts, _) =
         instance.encrypt_batch::<&mut OsRng>(&public_keys, &cleartexts, &mut rng);
 
-    println!("generated ciphertexts {:?}", ciphertexts);
+    // println!("generated ciphertexts {:?}", ciphertexts);
 
-    println!("before decrypt");
+    // println!("before decrypt");
 
     for i in 0..9 {
         let decrypted =

@@ -67,3 +67,6 @@ distributed_key_generation = { path = "crates/distributed_key_generation" }
 
 # EVM types
 primitive-types = { version = "0.12.1", default-features = false, features = ["serde", "rlp"] }
+
+[profile.test]
+inherits = "release"
